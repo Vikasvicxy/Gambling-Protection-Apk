@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <!-- Backups are disabled via android:allowBackup="false". -->
+    <cloud-backup disableIfNoEncryptionCapabilities="true" />
+    <device-transfer>
+        <exclude domain="root" path="." />
+    </device-transfer>
+</data-extraction-rules>

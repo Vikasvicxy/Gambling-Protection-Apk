@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Shield — Gambling Protection</string>
+    <string name="notification_channel_protection">Protection status</string>
+    <string name="notification_channel_protection_desc">Shows that local gambling protection is active.</string>
+    <string name="notification_title">Local protection active</string>
+    <string name="notification_text">Gambling domains are being blocked on this device.</string>
+    <string name="notification_tap">Open Shield</string>
+</resources>

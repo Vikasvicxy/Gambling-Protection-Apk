@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Backups are disabled via android:allowBackup="false". This file exists to
+         keep the manifest explicit and future-proof. -->
+</full-backup-content>

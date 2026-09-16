@@ -1,0 +1,23 @@
+{
+  "schema": "gamblock-seed-blocklist",
+  "version": 1,
+  "releasedAtEpochMs": 0,
+  "entries": [
+    { "domain": "bet-example.test", "category": "GAMBLING", "confidence": "HIGH", "riskLevel": "HIGH", "status": "ACTIVE", "source": "seed", "appliesToSubdomains": true },
+    { "domain": "casino-example.test", "category": "CASINO", "confidence": "HIGH", "riskLevel": "CRITICAL", "status": "ACTIVE", "source": "seed", "appliesToSubdomains": true },
+    { "domain": "sportsbook-example.test", "category": "SPORTSBOOK", "confidence": "HIGH", "riskLevel": "HIGH", "status": "ACTIVE", "source": "seed", "appliesToSubdomains": true },
+    { "domain": "poker-example.test", "category": "POKER", "confidence": "HIGH", "riskLevel": "HIGH", "status": "ACTIVE", "source": "seed", "appliesToSubdomains": true },
+    { "domain": "lotto-example.test", "category": "LOTTERY", "confidence": "HIGH", "riskLevel": "MEDIUM", "status": "ACTIVE", "source": "seed", "appliesToSubdomains": true },
+    { "domain": "crypto-casino-example.test", "category": "CRYPTO_GAMBLING", "confidence": "HIGH", "riskLevel": "HIGH", "status": "ACTIVE", "source": "seed", "appliesToSubdomains": true },
+    { "domain": "affiliate-example.test", "category": "AFFILIATE", "confidence": "MEDIUM", "riskLevel": "MEDIUM", "status": "ACTIVE", "source": "seed", "appliesToSubdomains": true },
+    { "domain": "slots-example.test", "category": "CASINO", "confidence": "MEDIUM", "riskLevel": "HIGH", "status": "ACTIVE", "source": "seed", "appliesToSubdomains": true },
+    { "domain": "greentable.test", "category": "GAMBLING", "confidence": "HIGH", "riskLevel": "HIGH", "status": "ACTIVE", "source": "seed", "appliesToSubdomains": true },
+    { "domain": "ringfence.test", "category": "GAMBLING", "confidence": "HIGH", "riskLevel": "HIGH", "status": "ACTIVE", "source": "seed", "appliesToSubdomains": true },
+    { "domain": "blackjack.test", "category": "CASINO", "confidence": "MEDIUM", "riskLevel": "HIGH", "status": "ACTIVE", "source": "seed", "appliesToSubdomains": true },
+    { "domain": "spinstation.test", "category": "GAMBLING", "confidence": "MEDIUM", "riskLevel": "MEDIUM", "status": "ACTIVE", "source": "seed", "appliesToSubdomains": true },
+    { "domain": "safe-example.test", "category": "GAMBLING", "confidence": "HIGH", "riskLevel": "LOW", "status": "ALLOWLISTED", "source": "seed-allowlist", "appliesToSubdomains": true },
+    { "domain": "search-example.test", "category": "GAMBLING", "confidence": "HIGH", "riskLevel": "LOW", "status": "ALLOWLISTED", "source": "seed-allowlist", "appliesToSubdomains": true },
+    { "domain": "media-example.test", "category": "GAMBLING", "confidence": "HIGH", "riskLevel": "LOW", "status": "ALLOWLISTED", "source": "seed-allowlist", "appliesToSubdomains": true },
+    { "domain": "maps-example.test", "category": "GAMBLING", "confidence": "HIGH", "riskLevel": "LOW", "status": "ALLOWLISTED", "source": "seed-allowlist", "appliesToSubdomains": true }
+  ]
+}

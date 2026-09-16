@@ -1,0 +1,42 @@
+# --- Gradle ---
+.gradle/
+build/
+**/build/
+local.properties
+.kotlin/
+
+# --- IDE ---
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+out/
+captures/
+
+# --- Secrets & keys (never commit) ---
+*.jks
+*.keystore
+*.p12
+keystore.properties
+signing.properties
+*.key
+secrets.properties
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs / caches ---
+*.log
+hs_err_pid*
+.renderscript/
+
+# --- Android / emulator ---
+*.apk
+*.aab
+*.ap_
+*.dex
+.cxx/
+*.hprof

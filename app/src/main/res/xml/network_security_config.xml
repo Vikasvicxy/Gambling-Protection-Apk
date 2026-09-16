@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Secure by default: cleartext HTTP is not allowed for app-sourced traffic.
+         Phase 1 performs no network I/O for protection itself. Future update /
+         reporting endpoints must use HTTPS. -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
