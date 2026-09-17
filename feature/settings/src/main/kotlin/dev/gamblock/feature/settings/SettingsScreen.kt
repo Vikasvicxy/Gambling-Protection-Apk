@@ -30,6 +30,8 @@ import dev.gamblock.core.designsystem.component.ShieldText
 @Composable
 fun SettingsRoute(
     onBack: () -> Unit,
+    onOpenAccountability: () -> Unit = {},
+    onOpenParent: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -88,6 +90,36 @@ fun SettingsRoute(
                     "Change the window in Protection setup.",
                     style = MaterialTheme.typography.bodySmall,
                 )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            ShieldCard(title = "Accountability") {
+                ShieldText(
+                    "Invite a trusted partner to receive minimal protection events, or accept an invitation.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                androidx.compose.material3.Button(
+                    onClick = onOpenAccountability,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Open Accountability")
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            ShieldCard(title = "Parent / Guardian") {
+                ShieldText(
+                    "Genuine parental control for a supervised child device with minimal aggregate stats.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                androidx.compose.material3.Button(
+                    onClick = onOpenParent,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Open Parent Mode")
+                }
             }
 
             Spacer(Modifier.height(16.dp))

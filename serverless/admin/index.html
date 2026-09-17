@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shield Admin</title>
+<style>
+  :root {
+    --bg: #12151c; --card: #1b1f2a; --text: #e8ecf4; --muted: #9aa4b8;
+    --accent: #4f7cff; --danger: #ff5c5c; --ok: #34c377; --warn: #ffb340;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { background: var(--card); border-bottom: 1px solid #2a3040; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+  nav { display: flex; gap: 8px; padding: 12px 24px; background: #161a23; border-bottom: 1px solid #2a3040; flex-wrap: wrap; }
+  nav button { background: transparent; border: 1px solid #323a4d; color: var(--muted); padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+  nav button.active { color: var(--accent); border-color: var(--accent); }
+  main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid #2a3040; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+  .grid { display: grid; gap: 16px; }
+  .stat-row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .stat { background: var(--card); border: 1px solid #2a3040; border-radius: 12px; padding: 18px; flex: 1; min-width: 160px; }
+  .stat .value { font-size: 28px; font-weight: 700; margin-top: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #242b3a; }
+  th { color: var(--muted); font-weight: 600; }
+  .badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; }
+  .ok { background: #143120; color: var(--ok); }
+  .warn { background: #3a2c10; color: var(--warn); }
+  .danger { background: #3a1a1a; color: var(--danger); }
+  button.action { background: var(--accent); border: none; color: white; padding: 6px 12px; border-radius: 8px; cursor: pointer; margin: 2px; }
+  button.action.danger { background: var(--danger); }
+  button.action.ghost { background: transparent; border: 1px solid #323a4d; color: var(--muted); }
+  #login { max-width: 420px; margin: 80px auto; }
+  input { width: 100%; background: #161a23; border: 1px solid #323a4d; color: var(--text); padding: 12px; border-radius: 8px; margin: 8px 0; }
+  .muted { color: var(--muted); }
+  #toast { position: fixed; bottom: 20px; right: 20px; background: var(--card); border: 1px solid var(--ok); padding: 12px 18px; border-radius: 8px; display: none; }
+</style>
+</head>
+<body>
+<header>
+  <strong>Shield Admin</strong>
+  <span id="session" class="muted"></span>
+</header>
+
+<div id="login">
+  <div class="card">
+    <h2>Admin sign in</h2>
+    <p class="muted">Passkey-ready. In the first deployment, administrators sign in via a web session minted by the backend operator.</p>
+    <input id="sessionToken" placeholder="Admin session token (one-time)" type="password">
+    <button class="action" style="width:100%" id="loginBtn">Continue</button>
+  </div>
+</div>
+
+<nav id="nav" style="display:none">
+  <button data-view="overview" class="active">Overview</button>
+  <button data-view="domains">Domains</button>
+  <button data-view="reports">User Reports</button>
+  <button data-view="audit">Audit Logs</button>
+</nav>
+
+<main id="main"></main>
+<div id="toast"></div>
+
+<script>
+const API = '/api/admin'
+let sessionToken = localStorage.getItem('admin-session') || ''
+
+const el = (t, attrs = {}, children = []) => {
+  const n = document.createElement(t)
+  Object.entries(attrs).forEach(([k, v]) => {
+    if (k === 'text') n.textContent = v
+    else if (k === 'html') n.innerHTML = v
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v)
+    else n.setAttribute(k, v)
+  })
+  children.forEach((c) => c && n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c))
+  return n
+}
+
+async function api(path, opts = {}) {
+  const headers = { 'content-type': 'application/json', 'x-admin-token': sessionToken }
+  const res = await fetch(API + path, { headers, ...opts })
+  if (res.status === 401) { showLogin(); throw new Error('Unauthorized') }
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.message || 'Request failed')
+  return data
+}
+
+function showLogin() {
+  document.getElementById('login').style.display = 'block'
+  document.getElementById('nav').style.display = 'none'
+  document.getElementById('main').innerHTML = ''
+  document.getElementById('session').textContent = ''
+}
+
+function showApp() {
+  document.getElementById('login').style.display = 'none'
+  document.getElementById('nav').style.display = 'flex'
+  document.getElementById('session').textContent = 'verified admin session'
+}
+
+function toast(msg, ok = true) {
+  const t = document.getElementById('toast')
+  t.textContent = msg
+  t.style.borderColor = ok ? 'var(--ok)' : 'var(--danger)'
+  t.style.display = 'block'
+  setTimeout(() => (t.style.display = 'none'), 3000)
+}
+
+const badge = (status) => el('span', { class: 'badge ' + (status === 'APPROVED' || status === 'ACTIVE' ? 'ok' : status === 'REJECTED' || status === 'DISABLE' ? 'danger' : 'warn'), text: status })
+
+async function renderOverview() {
+  const data = await api('/overview')
+  const main = document.getElementById('main')
+  main.innerHTML = ''
+  main.appendChild(el('div', { class: 'grid' }, [
+    el('div', { class: 'stat-row' }, [
+      el('div', { class: 'stat' }, [el('div', { class: 'muted', text: 'Domain candidates' }), el('div', { class: 'value', text: data.candidates })]),
+      el('div', { class: 'stat' }, [el('div', { class: 'muted', text: 'User reports' }), el('div', { class: 'value', text: data.reports })]),
+      el('div', { class: 'stat' }, [el('div', { class: 'muted', text: 'Heartbeats' }), el('div', { class: 'value', text: data.heartbeats })]),
+    ]),
+    el('div', { class: 'card' }, [el('h3', { text: 'System health' }), el('p', { class: 'muted', text: 'Backend is serverless. No always-running infrastructure. Push notifications, pairing and heartbeats are not proxied through normal browsing.' })]),
+  ]))
+}
+
+async function renderDomains() {
+  const { domains } = await api('/domains')
+  const main = document.getElementById('main')
+  main.innerHTML = ''
+  const card = el('div', { class: 'card' }, [el('h3', { text: 'Domain moderation' })])
+  const table = el('table', {}, [
+    el('thead', {}, [
+      el('tr', {}, ['Domain', 'Category', 'Confidence', 'Status', 'Source', 'Actions'].map((h) => el('th', { text: h }))),
+    ]),
+  ])
+  const tbody = el('tbody')
+  domains.forEach((d) => {
+    tbody.appendChild(el('tr', {}, [
+      el('td', { text: d.normalized_domain }),
+      el('td', { text: d.category }),
+      el('td', { text: d.confidence }),
+      el('td', {}, [badge(d.status)]),
+      el('td', { text: d.source || '-' }),
+      el('td', {}, [
+        el('button', { class: 'action', text: 'Approve', onclick: () => moderate(d.id, 'APPROVE') }),
+        el('button', { class: 'action ghost', text: 'Investigate', onclick: () => moderate(d.id, 'INVESTIGATE') }),
+        el('button', { class: 'action danger', text: 'Reject', onclick: () => moderate(d.id, 'REJECT') }),
+      ]),
+    ]))
+  })
+  table.appendChild(tbody)
+  card.appendChild(table)
+  main.appendChild(card)
+}
+
+async function renderReports() {
+  const { reports } = await api('/reports')
+  const main = document.getElementById('main')
+  main.innerHTML = ''
+  const card = el('div', { class: 'card' }, [el('h3', { text: 'User reports' })])
+  const table = el('table', {}, [
+    el('thead', {}, [el('tr', {}, ['Type', 'Domain', 'Note', 'Time'].map((h) => el('th', { text: h })))]),
+  ])
+  const tbody = el('tbody')
+  reports.forEach((r) => {
+    tbody.appendChild(el('tr', {}, [
+      el('td', { text: r.type }),
+      el('td', { text: r.normalized_domain }),
+      el('td', { text: r.note || '-' }),
+      el('td', { text: new Date(r.created_at).toLocaleString() }),
+    ]))
+  })
+  table.appendChild(tbody)
+  card.appendChild(table)
+  main.appendChild(card)
+}
+
+async function renderAudit() {
+  const { audit } = await api('/audit')
+  const main = document.getElementById('main')
+  main.innerHTML = ''
+  const card = el('div', { class: 'card' }, [el('h3', { text: 'Audit log' })])
+  const table = el('table', {}, [
+    el('thead', {}, [el('tr', {}, ['Actor', 'Action', 'Target', 'Time'].map((h) => el('th', { text: h })))]),
+  ])
+  const tbody = el('tbody')
+  audit.forEach((a) => {
+    tbody.appendChild(el('tr', {}, [
+      el('td', { text: a.actor }),
+      el('td', { text: a.action }),
+      el('td', { text: `${a.target_type} ${a.target_id || ''}`.trim() }),
+      el('td', { text: new Date(a.created_at).toLocaleString() }),
+    ]))
+  })
+  table.appendChild(tbody)
+  card.appendChild(table)
+  main.appendChild(card)
+}
+
+async function moderate(id, action) {
+  try {
+    await api('/domains/action', { method: 'POST', body: JSON.stringify({ id, action }) })
+    toast(`Action ${action} recorded`, true)
+    renderDomains()
+  } catch (e) {
+    toast(e.message, false)
+  }
+}
+
+document.getElementById('loginBtn').addEventListener('click', () => {
+  sessionToken = document.getElementById('sessionToken').value.trim()
+  localStorage.setItem('admin-session', sessionToken)
+  load()
+})
+
+async function load() {
+  try {
+    showApp()
+    await renderOverview()
+    document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', async () => {
+      document.querySelectorAll('nav button').forEach((x) => x.classList.remove('active'))
+      b.classList.add('active')
+      try {
+        if (b.dataset.view === 'overview') await renderOverview()
+        if (b.dataset.view === 'domains') await renderDomains()
+        if (b.dataset.view === 'reports') await renderReports()
+        if (b.dataset.view === 'audit') await renderAudit()
+      } catch (e) { console.error(e) }
+    }))
+  } catch (e) {
+    // Unauthorized -> show login
+  }
+}
+
+if (sessionToken) load() else showLogin()
+</script>
+</body>
+</html>

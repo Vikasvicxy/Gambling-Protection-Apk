@@ -1,0 +1,17 @@
+name = "shield-serverless"
+main = "src/index.ts"
+compatibility_date = "2025-02-01"
+
+[[d1_databases]]
+binding = "D1"
+database_name = "shield-db"
+database_id = "REPLACE_ME_WITH_D1_DATABASE_ID"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_ME_WITH_KV_NAMESPACE_ID"
+
+[vars]
+PAIRING_TOKEN_TTL = "600000"
+ADMIN_SESSION_TTL = "21600"
+REPORT_RATE_LIMIT = "5"

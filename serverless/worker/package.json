@@ -1,0 +1,16 @@
+{
+  "name": "shield-serverless",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shield serverless backend (Cloudflare Workers + D1 + KV). Zero-cost free tier, no always-running VM.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "migrate": "wrangler d1 migrations apply shield-db"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250210.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^3.100.0"
+  }
+}

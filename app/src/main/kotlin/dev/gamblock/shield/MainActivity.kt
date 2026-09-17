@@ -119,7 +119,21 @@ fun ShieldApp(
             dev.gamblock.feature.diagnostics.DiagnosticsRoute(onBack = { navController.popBackStack() })
         }
         composable("settings") {
-            dev.gamblock.feature.settings.SettingsRoute(onBack = { navController.popBackStack() })
+            dev.gamblock.feature.settings.SettingsRoute(
+                onBack = { navController.popBackStack() },
+                onOpenAccountability = { navController.navigate("accountability") },
+                onOpenParent = { navController.navigate("parent") },
+            )
+        }
+        composable("accountability") {
+            dev.gamblock.feature.accountability.AccountabilityRoute(
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable("parent") {
+            dev.gamblock.feature.parent.ParentRoute(
+                onBack = { navController.popBackStack() },
+            )
         }
         composable("support") {
             dev.gamblock.feature.support.SupportRoute(onBack = { navController.popBackStack() })

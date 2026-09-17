@@ -88,6 +88,9 @@ dependencies {
     implementation(project(":feature:diagnostics"))
     implementation(project(":feature:support"))
     implementation(project(":feature:settings"))
+    implementation(project(":feature:accountability"))
+    implementation(project(":feature:parent"))
+    implementation(project(":data:accountability"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
