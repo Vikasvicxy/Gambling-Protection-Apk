@@ -92,8 +92,16 @@ class ParentViewModel @Inject constructor(
         }
     }
 
-    fun childScope(childDeviceId: String): ParentAuthorization.Result =
-        parentAuthz.authorize(parentId, parentId, childDeviceId, childDeviceId)
+    fun childScope(childDeviceId: String): ParentAuthorization.Result {
+        val linked = _uiState.value.relationships.any {
+            it.partnerDeviceId == parentId && it.protectedDeviceId == childDeviceId
+        }
+        return if (!linked) {
+            ParentAuthorization.Result.Denied("attempt to access unrelated child device")
+        } else {
+            parentAuthz.authorize(parentId, parentId, childDeviceId, childDeviceId)
+        }
+    }
 
     fun clearError() {
         _uiState.value = _uiState.value.copy(lastError = null)

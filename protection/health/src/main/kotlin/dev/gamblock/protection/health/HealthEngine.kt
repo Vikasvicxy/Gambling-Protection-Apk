@@ -28,9 +28,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.withContext
 import android.os.Build
-import android.provider.Settings
-import android.content.Intent
-import android.net.Uri
 
 @Singleton
 class HealthEngine @Inject constructor(
@@ -134,22 +131,22 @@ class HealthEngine @Inject constructor(
     }
 
     private fun checkPermission(): ComponentHealth {
-        val issues = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= 33) {
+        val notificationsEnabled = if (Build.VERSION.SDK_INT >= 33) {
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-            if (nm != null && !nm.areNotificationsEnabled()) issues.add("notifications blocked")
+            nm?.areNotificationsEnabled() ?: true
+        } else {
+            true
         }
-        if (!Settings.canDrawOverlays(context)) issues.add("overlay not granted")
-        val exempt = try {
+        val batteryExempt = try {
             val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
             pm.isIgnoringBatteryOptimizations(context.packageName)
-        } catch (_: Exception) { false }
-        if (!exempt) issues.add("battery optimization active")
-        return ComponentHealth(
-            HealthComponent.PERMISSION,
-            if (issues.isEmpty()) HealthStatus.HEALTHY else HealthStatus.DEGRADED,
-            if (issues.isEmpty()) "all relevant permissions granted" else issues.joinToString("; "),
-            wallClock.nowEpochMillis(),
+        } catch (_: Exception) {
+            false
+        }
+        return HealthPermissionAudit.permissionHealth(
+            notificationsEnabled = notificationsEnabled,
+            batteryOptimizationExempt = batteryExempt,
+            nowEpochMs = wallClock.nowEpochMillis(),
         )
     }
 

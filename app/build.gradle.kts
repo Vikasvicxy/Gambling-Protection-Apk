@@ -7,6 +7,16 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+import java.io.FileInputStream
+import java.util.Properties
+
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        FileInputStream(keystorePropertiesFile).use { load(it) }
+    }
+}
+
 android {
     namespace = "dev.gamblock.shield"
     compileSdk = 37
@@ -15,11 +25,24 @@ android {
         applicationId = "dev.gamblock.shield"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+    }
+
+    signingConfigs {
+        // Optional release signing. Activates only when keystore.properties exists
+        // (git-ignored). Keystore files and passwords never live in the repository.
+        create("release") {
+            keystoreProperties.getProperty("storeFile")?.takeIf { it.isNotBlank() }?.let {
+                storeFile = file(it)
+            }
+            storePassword = keystoreProperties.getProperty("storePassword", "")
+            keyAlias = keystoreProperties.getProperty("keyAlias", "")
+            keyPassword = keystoreProperties.getProperty("keyPassword", "")
+        }
     }
 
     buildTypes {
@@ -34,8 +57,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // No signing config: release signing keys must never live in the repository.
-            // CI / maintainers sign with their own keystore outside VCS.
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

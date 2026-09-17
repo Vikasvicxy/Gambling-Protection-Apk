@@ -38,7 +38,18 @@ class DnsUpstreamProvider @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) = invalidate()
+        override fun onLost(network: Network) = invalidate()
+        override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) = invalidate()
+    }
+
     init {
+        try {
+            connectivityManager.registerDefaultNetworkCallback(networkCallback)
+        } catch (t: Throwable) {
+            logger.w(TAG, "network callback registration failed: ${t.message}")
+        }
         scope.launch {
             refresh(force = true)
             while (isActive) {
@@ -46,6 +57,11 @@ class DnsUpstreamProvider @Inject constructor(
                 refresh(force = false)
             }
         }
+    }
+
+    /** Drop the cached resolver list so the next query re-discovers on the active network. */
+    private fun invalidate() {
+        cached = emptyList()
     }
 
     fun currentServers(): List<InetAddress> {

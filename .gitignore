@@ -36,6 +36,9 @@ desktop.ini
 hs_err_pid*
 .renderscript/
 
+# --- Node (serverless worker) ---
+node_modules/
+
 # --- Android / emulator ---
 *.apk
 *.aab
