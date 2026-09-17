@@ -59,6 +59,7 @@ class HealthEngine @Inject constructor(
             checkCommitment(),
             checkBoot(),
             checkUpdate(),
+            checkDatabase(),
         )
         val report = HealthReport.aggregate(components, now)
         logger.i(Logs.HEALTH, "health: ${report.overall} (${report.components.size} components)")
@@ -181,5 +182,35 @@ class HealthEngine @Inject constructor(
             state.name,
             wallClock.nowEpochMillis(),
         )
+    }
+
+    private suspend fun checkDatabase(): ComponentHealth {
+        val snap = updateRepository.durableSnapshot()
+        return when {
+            snap.installedVersion <= 0 -> ComponentHealth(
+                HealthComponent.DATABASE,
+                HealthStatus.DEGRADED,
+                "no signed release applied",
+                wallClock.nowEpochMillis(),
+            )
+            else -> {
+                val ageDays = (wallClock.nowEpochMillis() - snap.lastSuccessEpochMs) / 86_400_000L
+                val staleness = if (ageDays > 7) "stale ${ageDays}d" else "fresh"
+                val detail = buildString {
+                    append("v${snap.installedVersion} ")
+                    append(if (snap.deltaLastApplied) "(delta)" else "(full)")
+                    append(" key ${snap.activeSigningKeyId?.take(6) ?: "?"} ")
+                    append(staleness)
+                    snap.previousGoodVersion?.let { append(", prev-good v$it") }
+                    snap.lastFailureReason?.let { append(", last: $it") }
+                }
+                ComponentHealth(
+                    HealthComponent.DATABASE,
+                    HealthStatus.HEALTHY,
+                    detail,
+                    wallClock.nowEpochMillis(),
+                )
+            }
+        }
     }
 }

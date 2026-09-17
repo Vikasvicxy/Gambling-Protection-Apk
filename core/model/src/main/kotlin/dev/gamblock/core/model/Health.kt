@@ -21,6 +21,7 @@ enum class HealthComponent {
     NETWORK,
     COMMITMENT,
     UPDATE,
+    DATABASE,
 }
 
 @Serializable

@@ -23,6 +23,9 @@ signing.properties
 *.key
 secrets.properties
 
+# --- Local-only tooling artifacts (never commit) ---
+local/
+
 # --- OS ---
 .DS_Store
 Thumbs.db

@@ -9,6 +9,9 @@ import dev.gamblock.core.common.logging.Logs
 import dev.gamblock.core.common.logging.ShieldLogger
 import dev.gamblock.data.blocklist.BlocklistRepository
 import dev.gamblock.data.preferences.TimingAnchorRepository
+import dev.gamblock.data.update.BlocklistUpdateEngine
+import dev.gamblock.data.update.UpdateScheduler
+import dev.gamblock.data.update.UpdateStateRepository
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -16,7 +19,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Bootstraps dependency injection, the WorkManager worker factory (required for
- * [dev.gamblock.protection.boot.ProtectionRecoveryWorker]) and the blocklist index.
+ * [dev.gamblock.protection.boot.ProtectionRecoveryWorker]) and the blocklist index,
+ * then schedules the twice-daily signed update check.
  */
 @HiltAndroidApp
 class ShieldApplication : Application(), Configuration.Provider {
@@ -24,6 +28,8 @@ class ShieldApplication : Application(), Configuration.Provider {
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var blocklistRepository: BlocklistRepository
     @Inject lateinit var timingAnchorRepository: TimingAnchorRepository
+    @Inject lateinit var updateStateRepository: UpdateStateRepository
+    @Inject lateinit var updateScheduler: UpdateScheduler
     @Inject lateinit var dispatchers: DispatchersProvider
     @Inject lateinit var logger: ShieldLogger
 
@@ -36,10 +42,12 @@ class ShieldApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        updateScheduler.schedulePeriodic()
         appScope.launch(dispatchers.io) {
             timingAnchorRepository.ensureFirstRunEpochMs()
+            updateStateRepository.initialize()
             blocklistRepository.initialize()
-            logger.i(Logs.SECURITY, "shield initialized: blocklist+timing ready")
+            logger.i(Logs.SECURITY, "shield initialized: blocklist+timing+update ready")
         }
     }
 }

@@ -1,0 +1,165 @@
+name: Blocklist Release
+
+on:
+  schedule:
+    # Every 12 hours: canary builds for continuous testing.
+    - cron: "0 3,15 * * *"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Release channel (canary or stable)"
+        required: true
+        default: "canary"
+        type: choice
+        options:
+          - canary
+          - stable
+      force_version:
+        description: "Override version number (leave empty for auto-increment)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blocklist-release
+  cancel-in-progress: false
+
+jobs:
+  # -----------------------------------------------------------------------
+  # Canary release: automatic, dev signing key, no approval gate.
+  # -----------------------------------------------------------------------
+  canary:
+    if: >
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.channel == 'canary')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Write production signing key
+        run: |
+          mkdir -p local
+          echo "${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}" > local/dev-signing-private-key.pem
+          chmod 600 local/dev-signing-private-key.pem
+
+      - name: Fetch sources
+        run: ./gradlew :tools:blocklist:run --args="fetch" --console=plain
+
+      - name: Process pipeline
+        run: ./gradlew :tools:blocklist:run --args="process" --console=plain
+
+      - name: Build signed canary release
+        run: |
+          VERSION_FLAG=""
+          if [ -n "${{ github.event.inputs.force_version }}" ]; then
+            VERSION_FLAG="--version ${{ github.event.inputs.force_version }}"
+          fi
+          ./gradlew :tools:blocklist:run --args="build --channel canary --private-key local/dev-signing-private-key.pem $VERSION_FLAG" --console=plain
+
+      - name: Verify release
+        run: ./gradlew :tools:blocklist:run --args="verify" --console=plain
+
+      - name: Publish to gh-pages
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Ensure the gh-pages branch exists (bootstrap once on first run).
+          (git fetch origin gh-pages --depth=1) || {
+            git checkout --orphan gh-pages
+            git commit --allow-empty -m "init gh-pages"
+            git push -u origin gh-pages
+          }
+          git worktree remove gh-pages-web --force 2>/dev/null || true
+          git worktree add gh-pages-web origin/gh-pages
+          mkdir -p gh-pages-web/canary
+          cp out/releases/latest.json gh-pages-web/canary/manifest.json
+          cp out/releases/blocklist-*.json.gz gh-pages-web/canary/ 2>/dev/null || true
+          cp out/releases/delta-*.json.gz gh-pages-web/canary/ 2>/dev/null || true
+          git -C gh-pages-web add canary/
+          if git -C gh-pages-web diff --cached --quiet; then
+            echo "No changes to publish"
+          else
+            git -C gh-pages-web commit -m "canary: $(jq -r '.manifest.releaseId' out/releases/latest.json) v$(jq -r '.manifest.version' out/releases/latest.json)"
+            git -C gh-pages-web push origin gh-pages
+          fi
+
+  # -----------------------------------------------------------------------
+  # Stable release: manual trigger only, production key, requires approval.
+  # -----------------------------------------------------------------------
+  stable:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    environment: stable-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Write production signing key
+        run: |
+          mkdir -p local
+          echo "${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}" > local/dev-signing-private-key.pem
+          chmod 600 local/dev-signing-private-key.pem
+
+      - name: Fetch sources
+        run: ./gradlew :tools:blocklist:run --args="fetch" --console=plain
+
+      - name: Process pipeline
+        run: ./gradlew :tools:blocklist:run --args="process" --console=plain
+
+      - name: Build signed stable release
+        run: |
+          VERSION_FLAG=""
+          if [ -n "${{ github.event.inputs.force_version }}" ]; then
+            VERSION_FLAG="--version ${{ github.event.inputs.force_version }}"
+          fi
+          ./gradlew :tools:blocklist:run --args="build --channel stable --private-key local/dev-signing-private-key.pem $VERSION_FLAG" --console=plain
+
+      - name: Verify release
+        run: ./gradlew :tools:blocklist:run --args="verify" --console=plain
+
+      - name: Publish to gh-pages
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Ensure the gh-pages branch exists (bootstrap once on first run).
+          (git fetch origin gh-pages --depth=1) || {
+            git checkout --orphan gh-pages
+            git commit --allow-empty -m "init gh-pages"
+            git push -u origin gh-pages
+          }
+          git worktree remove gh-pages-web --force 2>/dev/null || true
+          git worktree add gh-pages-web origin/gh-pages
+          mkdir -p gh-pages-web/stable
+          cp out/releases/latest.json gh-pages-web/stable/manifest.json
+          cp out/releases/blocklist-*.json.gz gh-pages-web/stable/ 2>/dev/null || true
+          cp out/releases/delta-*.json.gz gh-pages-web/stable/ 2>/dev/null || true
+          git -C gh-pages-web add stable/
+          if git -C gh-pages-web diff --cached --quiet; then
+            echo "No changes to publish"
+          else
+            git -C gh-pages-web commit -m "stable: $(jq -r '.manifest.releaseId' out/releases/latest.json) v$(jq -r '.manifest.version' out/releases/latest.json)"
+            git -C gh-pages-web push origin gh-pages
+          fi

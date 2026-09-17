@@ -25,6 +25,9 @@ interface DomainDao {
     @Query("SELECT * FROM domain_rules WHERE normalizedDomain = :normalized LIMIT 1")
     suspend fun findByNormalized(normalized: String): DomainEntity?
 
+    @Query("SELECT * FROM domain_rules")
+    suspend fun findAll(): List<DomainEntity>
+
     @Query("SELECT COUNT(*) FROM domain_rules WHERE status = 'ACTIVE'")
     suspend fun activeCount(): Int
 

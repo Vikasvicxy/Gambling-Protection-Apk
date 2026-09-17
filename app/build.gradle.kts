@@ -76,6 +76,7 @@ dependencies {
     implementation(project(":data:blocklist"))
     implementation(project(":data:preferences"))
     implementation(project(":data:repository"))
+    implementation(project(":data:update"))
     implementation(project(":protection:vpn"))
     implementation(project(":protection:boot"))
     implementation(project(":protection:health"))
