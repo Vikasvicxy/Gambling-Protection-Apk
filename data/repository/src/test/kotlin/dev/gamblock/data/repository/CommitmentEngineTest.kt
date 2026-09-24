@@ -199,4 +199,40 @@ class CommitmentEngineTest {
         engine.deleteAll()
         assertThat(db.commitmentDao().latest()).isNull()
     }
+
+    @Test
+    fun `wall clock shift does not affect accumulated elapsed`() = runTest {
+        val created = (engine.createCommitment(CommitmentDurationOption.H24.durationMillis) as CommitmentStartResult.Success).commitment
+        awaitActive(created)
+        monotonicClock.advance(2 * 60 * 60 * 1000L)
+        engine.tick()
+
+        // Shift the wall clock far into the past and far into the future.
+        wallClock.set(wallClock.nowEpochMillis() - 365 * 24 * 3600_000L)
+        val afterBack = engine.tick()!!
+        assertThat(afterBack.accumulatedElapsedMillis).isEqualTo(2 * 60 * 60 * 1000L)
+
+        wallClock.set(wallClock.nowEpochMillis() + 2 * 365 * 24 * 3600_000L)
+        val afterForward = engine.tick()!!
+        assertThat(afterForward.accumulatedElapsedMillis).isEqualTo(2 * 60 * 60 * 1000L)
+        // canFinish reflects only monotonic accumulation, not wall clock.
+        assertThat(afterForward.canFinish).isFalse()
+    }
+
+    @Test
+    fun `new commitment can start after legitimate completion`() = runTest {
+        val created = (engine.createCommitment(CommitmentDurationOption.H24.durationMillis) as CommitmentStartResult.Success).commitment
+        awaitActive(created)
+        monotonicClock.advance(CommitmentDurationOption.H24.durationMillis)
+        engine.tick()
+        engine.finish()
+
+        assertThat(engine.active).isNull()
+
+        wallClock.advance(1_000)
+        val second = (engine.createCommitment(CommitmentDurationOption.D3.durationMillis) as CommitmentStartResult.Success).commitment
+        awaitActive(second)
+        assertThat(second.id).isNotEqualTo(created.id)
+        assertThat(second.intendedDurationMs).isEqualTo(CommitmentDurationOption.D3.durationMillis)
+    }
 }

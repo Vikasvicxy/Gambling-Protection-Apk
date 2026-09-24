@@ -10,6 +10,23 @@
 3. Confirm permission grants: VPN service, POST_NOTIFICATIONS, no background restriction.
 4. Record: device model, Android version, OEM UI/build, Play Services version, network (Wi-Fi and mobile), app version.
 
+## Automated runner (recommended over the manual table below)
+`scripts/phase4-real-device-test.ps1` performs the preflight (adb + connected device),
+records device facts to `out/device-test/session-<ts>.json`, optionally installs the APK
+(`-Install -Apk <path>`), then walks the matrix rows from THIS file interactively
+(Pass/Skip/Fail + evidence) and writes `results-<ts>.csv` + `.json`. Without a connected
+device it stops cleanly and prints `WAITING FOR PHYSICAL DEVICE` (exit 0):
+
+```powershell
+.\scripts\phase4-real-device-test.ps1
+.\scripts\phase4-real-device-test.ps1 -Install -Apk app\build\outputs\apk\release\app-release-unsigned.apk
+```
+
+The script is read-only against the device except for the explicit `-Install` flag
+(`adb install -r` + POST_NOTIFICATIONS grant for `dev.gamblock.shield`). Record per-row
+results from the interactive run; do not claim any row TESTED unless the device outcome
+matches the pass criteria.
+
 ## §2 — VPN / DNS end-to-end blocking
 | ID | Test | Pass criteria | Result |
 |---|---|---|---|

@@ -229,6 +229,12 @@ export default {
         const relationshipId = typeof body.relationshipId === 'string' ? body.relationshipId : null
         const change = typeof body.change === 'string' ? body.change : null
         if (!relationshipId || !change) return bad('invalid_approval', 'relationshipId and change required')
+        // Server-side authorization: only a linked device may open an approval against
+        // a relationship. Never trust a client-declared relationship membership.
+        const rel = await env.D1.prepare(
+          'SELECT id FROM relationships WHERE id = ? AND (protected_device_id = ? OR partner_device_id = ?)',
+        ).bind(relationshipId, deviceId, deviceId).first()
+        if (!rel) return bad('forbidden', 'not part of this relationship', 403)
         const id = randomPart() + randomPart()
         const now = Date.now()
         await env.D1.prepare(
@@ -261,7 +267,7 @@ export default {
         const row = await env.D1.prepare(
           `SELECT a.id, a.relationship_id FROM approvals a
            JOIN relationships r ON r.id = a.relationship_id
-           WHERE a.id = ? AND (r.protected_device_id = ? OR r.partner_device_id = ?)`,
+           WHERE a.id = ? AND a.status = 'PENDING' AND (r.protected_device_id = ? OR r.partner_device_id = ?)`,
         )
           .bind(requestId, deviceId, deviceId)
           .first()

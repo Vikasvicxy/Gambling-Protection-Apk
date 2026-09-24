@@ -59,6 +59,13 @@ class BlocklistApplier @Inject constructor(
         viaDelta: Boolean,
         rollback: Boolean = false,
     ) {
+        // A signed-but-empty release must not silently wipe protection. The only
+        // intended way to ship a reduced set is an explicitly-flagged signed rollback.
+        if (records.isEmpty() && !rollback) {
+            throw IllegalArgumentException(
+                "refusing to apply an empty blocklist (release $releaseId v$version has no rules; requires an explicit signed rollback)",
+            )
+        }
         val entities = records.map { it.toDomainEntity() }
         val models = entities.map { it.toModel() }
         val digest = DomainIndexCompiler.integrityDigest(models)

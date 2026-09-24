@@ -257,7 +257,7 @@ class ShieldVpnService : VpnService() {
             stateStore.recordQuery(allowed = false)
             recorder.recordBlocked(question.name, decision)
             writeResponse(udp, DnsResponseFactory.blocked(query), output)
-            logger.i(Logs.DNS, "BLOCK ${question.name} (${decision.reason})")
+            logger.d(Logs.DNS, "BLOCK ${question.name} (${decision.reason})")
             return
         }
 
@@ -265,7 +265,7 @@ class ShieldVpnService : VpnService() {
         val answer = forwardQuery(udp, query)
         val response = answer ?: DnsResponseFactory.refused(query) // fail-open on upstream errors
         writeResponse(udp, response, output)
-        logger.i(Logs.DNS, "ALLOW ${question.name} (upstream ${if (answer != null) "ok" else "fail-open"})")
+        logger.d(Logs.DNS, "ALLOW ${question.name} (upstream ${if (answer != null) "ok" else "fail-open"})")
     }
 
     private fun forwardQuery(udp: UdpPacket, query: ByteArray): ByteArray? {

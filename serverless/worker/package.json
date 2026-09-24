@@ -6,10 +6,13 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "migrate": "wrangler d1 migrations apply shield-db"
+    "migrate": "wrangler d1 migrations apply shield-db",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/worker.test.js"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250210.0",
+    "@types/node": "^24.13.5",
     "typescript": "^5.7.0",
     "wrangler": "^3.100.0"
   }

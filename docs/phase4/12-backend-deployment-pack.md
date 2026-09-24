@@ -40,4 +40,4 @@
 ## Gap notes (report these honestly)
 - **Admin login rate limit — DEFERRED** (worker is stateless; a KV-based limiter is a follow-up).
 - `REPORT_RATE_LIMIT` env declared but unused in code — remove or wire it up (documented for the follow-up).
-- No deployment automation/test fixture against the real worker endpoints beyond local unit tests; wire-format E2E requires the goal state above.
+- Offline wire-format tests now exist (`src/worker.test.ts`, 19 tests; `npm test`) — see `17-hardening-addendum.md` §4. Live wire-format E2E against the deployed worker still requires the deployment steps above.

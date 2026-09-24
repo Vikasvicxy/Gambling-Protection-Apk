@@ -214,6 +214,68 @@ class BlocklistUpdateEngineTest {
         assertThat(state.state.value).isEqualTo(UpdateState.FAILED)
     }
 
+    @Test
+    fun `corrupt delta with valid full falls back to full and applies`() = runTest {
+        val v1 = buildRelease(1, null, records(1, "a.example", "b.example"))
+        serve(v1)
+        val first = engine(keyRingSource()).checkForUpdate()
+        assertThat(first).contains("applied full v1")
+
+        val v2 = buildRelease(2, records(1, "a.example", "b.example"), records(2, "a.example", "c.example"))
+        assertThat(v2.envelope.manifest.delta).isNotNull()
+        serve(v2)
+        // Corrupt only the delta bytes; the full artifact stays intact.
+        fetcher.artifacts[v2.envelope.manifest.delta!!.fileName] =
+            fetcher.artifacts.getValue(v2.envelope.manifest.delta!!.fileName) + byteArrayOf(0x7f)
+
+        val result = engine(keyRingSource()).checkForUpdate()
+
+        assertThat(result).contains("applied full v2")
+        assertThat(state.state.value).isEqualTo(UpdateState.UP_TO_DATE)
+        assertThat(metaDao.get(BlocklistRepository.KEY_VERSION)).isEqualTo("2")
+        assertThat(metaDao.get(UpdateMeta.KEY_DELTA_LAST_APPLIED)).isEqualTo("false")
+        val rows = domainDao.findAll().map { it.normalizedDomain }.sorted()
+        assertThat(rows).containsExactly("a.example", "c.example")
+    }
+
+    @Test
+    fun `corrupt delta and corrupt full preserve previous good v1`() = runTest {
+        val v1 = buildRelease(1, null, records(1, "a.example", "b.example"))
+        serve(v1)
+        val first = engine(keyRingSource()).checkForUpdate()
+        assertThat(first).contains("applied full v1")
+
+        val v2 = buildRelease(2, records(1, "a.example", "b.example"), records(2, "a.example", "c.example"))
+        serve(v2)
+        fetcher.artifacts[v2.envelope.manifest.delta!!.fileName] =
+            fetcher.artifacts.getValue(v2.envelope.manifest.delta!!.fileName) + byteArrayOf(0x7f)
+        fetcher.artifacts[v2.envelope.manifest.full.fileName] =
+            fetcher.artifacts.getValue(v2.envelope.manifest.full.fileName) + byteArrayOf(0x7f)
+
+        val result = engine(keyRingSource()).checkForUpdate()
+
+        assertThat(result).contains("full verify failed")
+        assertThat(state.state.value).isEqualTo(UpdateState.FAILED)
+        assertThat(metaDao.get(BlocklistRepository.KEY_VERSION)).isEqualTo("1")
+        assertThat(metaDao.get(UpdateMeta.KEY_ACTIVE_RELEASE_ID)).isEqualTo("test-release-v1")
+        val rows = domainDao.findAll().map { it.normalizedDomain }.sorted()
+        assertThat(rows).containsExactly("a.example", "b.example")
+    }
+
+    @Test
+    fun `empty verified release is refused so protection is never wiped`() = runTest {
+        val v2 = buildRelease(2, null, emptyList())
+        serve(v2)
+
+        val result = engine(keyRingSource()).checkForUpdate()
+
+        assertThat(result).contains("apply failed")
+        assertThat(result).contains("empty blocklist")
+        assertThat(state.state.value).isEqualTo(UpdateState.FAILED)
+        assertThat(metaDao.get(BlocklistRepository.KEY_VERSION)).isNull()
+        assertThat(domainDao.findAll()).isEmpty()
+    }
+
     // --------------------------------------------------------------- delta path
 
     @Test

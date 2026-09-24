@@ -138,4 +138,34 @@ class SensitiveChangePolicyTest {
             ),
         ).isTrue()
     }
+
+    @Test
+    fun `every approval-required sensitive change requires exactly the capability mapped to it`() {
+        val approvalMapped = mapOf(
+            dev.gamblock.core.model.SensitiveChange.REPLACE_PROTECTED_DEVICE to PartnerCapability.APPROVE_DEVICE_REPLACEMENT,
+            dev.gamblock.core.model.SensitiveChange.CHANGE_ACCOUNTABILITY_PARTNER to PartnerCapability.APPROVE_PARTNER_CHANGES,
+            dev.gamblock.core.model.SensitiveChange.DISABLE_ACCOUNTABILITY_ALERTS to PartnerCapability.APPROVE_ALERT_DISABLE,
+            dev.gamblock.core.model.SensitiveChange.EXTEND_RELATIONSHIP to PartnerCapability.EXTEND_PROTECTION,
+        )
+        for ((change, required) in approvalMapped) {
+            assertThat(SensitiveChangePolicy.capabilityRequired(change)).isEqualTo(required)
+            assertThat(SensitiveChangePolicy.partnerMayApprove(change, setOf(required))).isTrue()
+            // A different capability must not authorize this change.
+            val others = PartnerCapability.entries.minus(required)
+            for (other in others) {
+                assertThat(SensitiveChangePolicy.partnerMayApprove(change, setOf(other))).isFalse()
+            }
+            assertThat(SensitiveChangePolicy.partnerMayApprove(change, emptySet())).isFalse()
+        }
+    }
+
+    @Test
+    fun `sensitive change without approval mapping is deniable by default`() {
+        // DISABLE_PROTECTION is deliberately NOT approvable by any partner capability:
+        // self-protection can never be switched off through an accountability approval.
+        assertThat(SensitiveChangePolicy.capabilityRequired(dev.gamblock.core.model.SensitiveChange.DISABLE_PROTECTION))
+            .isNull()
+        assertThat(SensitiveChangePolicy.partnerMayApprove(dev.gamblock.core.model.SensitiveChange.DISABLE_PROTECTION, PartnerCapability.entries.toSet()))
+            .isFalse()
+    }
 }
