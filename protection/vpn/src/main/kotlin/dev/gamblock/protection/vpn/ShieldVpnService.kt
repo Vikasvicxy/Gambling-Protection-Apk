@@ -1,20 +1,16 @@
 package dev.gamblock.protection.vpn
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.VpnService
-import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.system.Os
 import android.system.OsConstants
 import android.system.StructPollfd
-import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import dagger.hilt.android.AndroidEntryPoint
 import dev.gamblock.core.common.clock.WallClock
@@ -41,6 +37,7 @@ import javax.inject.Inject
 import kotlin.concurrent.Volatile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -66,6 +63,7 @@ class ShieldVpnService : VpnService() {
     @Inject lateinit var stateStore: VpnStateStore
     @Inject lateinit var upstreamProvider: DnsUpstreamProvider
     @Inject lateinit var recorder: BlockEventRecorder
+    @Inject lateinit var notificationManager: VpnNotificationManager
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -74,6 +72,8 @@ class ShieldVpnService : VpnService() {
 
     @Volatile
     private var tunThread: Thread? = null
+
+    private var notificationJob: Job? = null
 
     private var pfd: ParcelFileDescriptor? = null
     private val upstreamSemaphore = Semaphore(32)
@@ -139,6 +139,8 @@ class ShieldVpnService : VpnService() {
         stateStore.markConnected(wallClock.nowEpochMillis())
         running = true
         resetCounters()
+        notificationManager.ensureChannel()
+        startNotificationTicker()
 
         val input = FileInputStream(established.fileDescriptor)
         val output = FileOutputStream(established.fileDescriptor)
@@ -149,6 +151,21 @@ class ShieldVpnService : VpnService() {
 
         launchScheduleMonitor()
         logger.i(Logs.VPN, "VPN established: $VpnConfig.TUN_ADDR/32, MTU ${VpnConfig.TUN_MTU}")
+    }
+
+    /** Rebuilds the live FGS notification with throttled query/block counts. */
+    private fun startNotificationTicker() {
+        notificationJob?.cancel()
+        notificationJob = scope.launch {
+            var lastUpdateMs = 0L
+            stateStore.state.collect { state ->
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastUpdateMs >= VpnNotificationManager.UPDATE_THROTTLE_MS) {
+                    lastUpdateMs = now
+                    notificationManager.update(state)
+                }
+            }
+        }
     }
 
     private fun launchScheduleMonitor() {
@@ -262,6 +279,10 @@ class ShieldVpnService : VpnService() {
         }
 
         stateStore.recordQuery(allowed = true)
+        if (decision.bypassViaException) {
+            stateStore.recordExceptionApplied()
+            logger.d(Logs.VPN, "EXCEPTION ${question.name} (custom allowlist)")
+        }
         val answer = forwardQuery(udp, query)
         val response = answer ?: DnsResponseFactory.refused(query) // fail-open on upstream errors
         writeResponse(udp, response, output)
@@ -321,6 +342,8 @@ class ShieldVpnService : VpnService() {
     private fun shutdown() {
         val wasRunning = running
         running = false
+        notificationJob?.cancel()
+        notificationJob = null
         pfd?.close()
         pfd = null
         tunThread?.let { thread ->
@@ -359,27 +382,11 @@ class ShieldVpnService : VpnService() {
     }
 
     private fun startVpnForeground() {
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(
-                NotificationChannel(
-                    CHANNEL_ID,
-                    "VPN protection",
-                    NotificationManager.IMPORTANCE_LOW,
-                ).apply { setShowBadge(false) },
-            )
-        }
-        val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Shield is protecting this phone")
-            .setContentText("All internet traffic is filtered locally")
-            .setSmallIcon(R.drawable.ic_stat_shield_vpn)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setContentIntent(buildConfigureIntent())
-            .build()
+        notificationManager.ensureChannel()
+        val notification = notificationManager.buildLive(stateStore.state.value)
         ServiceCompat.startForeground(
             this,
-            NOTIFICATION_ID,
+            VpnNotificationManager.NOTIFICATION_ID,
             notification,
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
         )
@@ -392,8 +399,6 @@ class ShieldVpnService : VpnService() {
     companion object {
         const val ACTION_START = "dev.gamblock.shield.action.START"
         const val ACTION_STOP = "dev.gamblock.shield.action.STOP"
-        private const val CHANNEL_ID = "shield_vpn"
-        private const val NOTIFICATION_ID = 1
         private const val UPSTREAM_TIMEOUT_MS = 4_000
         private const val MAX_DNS_REPLY = 2_048
         private const val READ_SIZE = 9_000

@@ -6,16 +6,19 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import dev.gamblock.core.database.dao.ActivityEventDao
 import dev.gamblock.core.database.dao.BlockAttemptGroupDao
 import dev.gamblock.core.database.dao.CommitmentDao
+import dev.gamblock.core.database.dao.CustomDomainExceptionDao
 import dev.gamblock.core.database.dao.DomainDao
 import dev.gamblock.core.database.dao.FalsePositiveReportDao
 import dev.gamblock.core.database.dao.MetaDao
 import dev.gamblock.core.database.entity.ActivityEventEntity
 import dev.gamblock.core.database.entity.BlockAttemptGroupEntity
 import dev.gamblock.core.database.entity.CommitmentEntity
+import dev.gamblock.core.database.entity.CustomDomainExceptionEntity
 import dev.gamblock.core.database.entity.DomainEntity
 import dev.gamblock.core.database.entity.FalsePositiveReportEntity
 import dev.gamblock.core.database.entity.MetaEntity
@@ -58,8 +61,9 @@ class EnumsConverter {
         FalsePositiveReportEntity::class,
         CommitmentEntity::class,
         MetaEntity::class,
+        CustomDomainExceptionEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(EnumsConverter::class)
@@ -71,6 +75,7 @@ abstract class ShieldDatabase : RoomDatabase() {
     abstract fun falsePositiveReportDao(): FalsePositiveReportDao
     abstract fun commitmentDao(): CommitmentDao
     abstract fun metaDao(): MetaDao
+    abstract fun customDomainExceptionDao(): CustomDomainExceptionDao
 
     companion object {
 
@@ -84,6 +89,7 @@ abstract class ShieldDatabase : RoomDatabase() {
 
         fun build(context: Context, name: String): ShieldDatabase =
             Room.databaseBuilder(context, ShieldDatabase::class.java, name)
+                .addMigrations(MIGRATION_1_2)
                 .addCallback(object : RoomDatabase.Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
@@ -96,6 +102,24 @@ abstract class ShieldDatabase : RoomDatabase() {
         fun inMemory(context: Context): ShieldDatabase =
             Room.inMemoryDatabaseBuilder(context, ShieldDatabase::class.java)
                 .allowMainThreadQueries()
+                .addMigrations(MIGRATION_1_2)
                 .build()
+
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `custom_domain_exceptions` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`normalizedDomain` TEXT NOT NULL, " +
+                        "`createdAtEpochMs` INTEGER NOT NULL, " +
+                        "`expiresAtEpochMs` INTEGER, " +
+                        "`note` TEXT NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_custom_domain_exceptions_normalizedDomain` " +
+                        "ON `custom_domain_exceptions` (`normalizedDomain`)",
+                )
+            }
+        }
     }
 }

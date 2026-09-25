@@ -11,12 +11,15 @@ import dev.gamblock.core.database.entity.toEntity
 import dev.gamblock.core.database.entity.toModel
 import dev.gamblock.core.model.BlockDecision
 import dev.gamblock.core.model.BlocklistStats
+import dev.gamblock.core.model.DecisionKind
 import dev.gamblock.core.model.UpdateState
 import dev.gamblock.core.model.util.stableHash
 import dev.gamblock.protection.domainengine.CompiledIndex
+import dev.gamblock.protection.domainengine.CustomDomainExceptionMatcher
 import dev.gamblock.protection.domainengine.DecisionEngine
 import dev.gamblock.protection.domainengine.DomainBlocker
 import dev.gamblock.protection.domainengine.DomainIndexCompiler
+import dev.gamblock.protection.domainengine.DomainNormalizer
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,6 +56,15 @@ class BlocklistRepository @Inject constructor(
 
     @Volatile
     private var engine: DecisionEngine? = null
+
+    /** In-memory overlay (normalized domain -> covered) for custom user exceptions. */
+    @Volatile
+    private var exceptionOverlay: Set<String> = emptySet()
+
+    /** Swaps the exception overlay; the hot path never touches SQLite. */
+    fun setCustomExceptions(exceptions: Set<String>) {
+        exceptionOverlay = exceptions
+    }
 
     override val ruleCount: Int
         get() = _state.value?.compiled?.enabledCount ?: 0
@@ -134,7 +146,23 @@ class BlocklistRepository @Inject constructor(
                 reason = "blocklist index not ready: fail-open",
             )
         }
-        return e.decide(host, scheduleActive)
+        val decision = e.decide(host, scheduleActive)
+        if (decision.decision == dev.gamblock.core.model.DecisionKind.BLOCK) {
+            val exceptions = exceptionOverlay
+            if (exceptions.isNotEmpty()) {
+                val normalized = DomainNormalizer.normalize(host)
+                if (normalized != null && CustomDomainExceptionMatcher.matches(normalized, exceptions)) {
+                    return BlockDecision(
+                        decision = dev.gamblock.core.model.DecisionKind.ALLOW,
+                        ruleHit = null,
+                        signature = stableHash("exception:$normalized").toString(),
+                        reason = "custom exception override",
+                        bypassViaException = true,
+                    )
+                }
+            }
+        }
+        return decision
     }
 
     private suspend fun seedFromAssets() {

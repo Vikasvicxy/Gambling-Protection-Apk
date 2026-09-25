@@ -11,6 +11,7 @@ import dev.gamblock.core.database.ShieldDatabase
 import dev.gamblock.core.database.dao.ActivityEventDao
 import dev.gamblock.core.database.dao.BlockAttemptGroupDao
 import dev.gamblock.core.database.dao.CommitmentDao
+import dev.gamblock.core.database.dao.CustomDomainExceptionDao
 import dev.gamblock.core.database.dao.DomainDao
 import dev.gamblock.core.database.dao.FalsePositiveReportDao
 import dev.gamblock.core.database.dao.MetaDao
@@ -31,4 +32,5 @@ object DatabaseModule {
     @Provides fun provideReportDao(db: ShieldDatabase): FalsePositiveReportDao = db.falsePositiveReportDao()
     @Provides fun provideCommitmentDao(db: ShieldDatabase): CommitmentDao = db.commitmentDao()
     @Provides fun provideMetaDao(db: ShieldDatabase): MetaDao = db.metaDao()
+    @Provides fun provideCustomDomainExceptionDao(db: ShieldDatabase): CustomDomainExceptionDao = db.customDomainExceptionDao()
 }

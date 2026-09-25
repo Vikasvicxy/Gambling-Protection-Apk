@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shield_tile_label">Shield protection</string>
+    <string name="notif_channel_vpn_name">Shield VPN protection</string>
+    <string name="notif_channel_vpn_desc">Persistent status while Shield filters DNS lookups on this device. Tapping the notification opens your activity history.</string>
+    <string name="notif_vpn_title">Shield is protecting this phone</string>
+    <string name="notif_action_activity">View activity</string>
+    <string name="notif_action_pause">Pause protection</string>
+</resources>

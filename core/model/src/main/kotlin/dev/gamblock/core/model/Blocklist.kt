@@ -110,6 +110,19 @@ data class BlockDecision(
     val signature: String,
     /** Reason string for debugging / diagnostics. */
     val reason: String = "",
+    /** True when a custom user exception overrode an otherwise blocked verdict. */
+    val bypassViaException: Boolean = false,
+)
+
+/** A user-created domain bypass (temporary or permanent). */
+@Serializable
+data class CustomDomainException(
+    val id: Long,
+    val normalizedDomain: String,
+    val createdAtEpochMs: Long,
+    /** Null = permanent; otherwise the exception self-removes after this instant. */
+    val expiresAtEpochMs: Long? = null,
+    val note: String = "",
 )
 
 @Serializable
