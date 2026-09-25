@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
 /**
  * Bootstraps dependency injection, the WorkManager worker factory (required for
  * [dev.gamblock.protection.boot.ProtectionRecoveryWorker]) and the blocklist index,
- * then schedules the twice-daily signed update check.
+ * then schedules the daily signed update sync.
  */
 @HiltAndroidApp
 class ShieldApplication : Application(), Configuration.Provider {

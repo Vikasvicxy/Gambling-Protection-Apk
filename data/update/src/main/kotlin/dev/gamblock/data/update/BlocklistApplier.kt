@@ -69,6 +69,10 @@ class BlocklistApplier @Inject constructor(
         val entities = records.map { it.toDomainEntity() }
         val models = entities.map { it.toModel() }
         val digest = DomainIndexCompiler.integrityDigest(models)
+        val compiled = DomainIndexCompiler.compile(models, sourceVersion = version)
+        if (compiled.digest != digest) {
+            throw IllegalStateException("compiled blocklist digest mismatch for release $releaseId v$version")
+        }
         val now = System.currentTimeMillis()
 
         db.withTransaction {
@@ -97,7 +101,7 @@ class BlocklistApplier @Inject constructor(
             metaDao.put(MetaEntity(UpdateMeta.KEY_ROLLBACK_EVER_APPLIED, rollback.toString()))
         }
 
-        blocklistRepository.rebuildIndex()
+        blocklistRepository.publishCompiledIndex(compiled)
         logger.i(Logs.DB, "applied blocklist v$version ($releaseId, ${entities.size} rows, delta=$viaDelta)")
     }
 

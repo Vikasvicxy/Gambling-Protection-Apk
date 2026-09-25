@@ -26,12 +26,18 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicReference
 
 /** Immutable snapshot of the in-memory block engine exposed to the UI. */
 data class BlocklistSnapshot(
     val compiled: CompiledIndex,
     val stats: BlocklistStats,
     val sourceVersion: Int,
+)
+
+private data class PublishedIndex(
+    val engine: DecisionEngine,
+    val compiled: CompiledIndex,
 )
 
 /**
@@ -54,8 +60,7 @@ class BlocklistRepository @Inject constructor(
     private val _state = MutableStateFlow<BlocklistSnapshot?>(null)
     val state: StateFlow<BlocklistSnapshot?> = _state.asStateFlow()
 
-    @Volatile
-    private var engine: DecisionEngine? = null
+    private val publishedIndex = AtomicReference<PublishedIndex?>(null)
 
     /** In-memory overlay (normalized domain -> covered) for custom user exceptions. */
     @Volatile
@@ -70,7 +75,7 @@ class BlocklistRepository @Inject constructor(
         get() = _state.value?.compiled?.enabledCount ?: 0
 
     override val isReady: Boolean
-        get() = engine != null
+        get() = publishedIndex.get() != null
 
     /** Loads the seed once, then compiles the working index. Idempotent. */
     suspend fun initialize() {
@@ -90,24 +95,29 @@ class BlocklistRepository @Inject constructor(
             val rows = domainDao.enabledRules()
             val records = rows.map { it.toModel() }
             val compiled = DomainIndexCompiler.compile(records, sourceVersion = metaDao.get(KEY_VERSION)?.toInt() ?: 1)
-            engine = DecisionEngine(compiled.index)
-            _state.value = BlocklistSnapshot(
-                compiled = compiled,
-                stats = BlocklistStats(
-                    databaseVersion = compiled.sourceVersion,
-                    enabledRuleCount = compiled.enabledCount,
-                    allowlistedRuleCount = compiled.allowlistCount,
-                    lastLoadedEpochMs = wallClock.nowEpochMillis(),
-                    integrityDigest = compiled.digest,
-                    updateState = UpdateState.IDLE,
-                ),
-                sourceVersion = compiled.sourceVersion,
-            )
+            publishCompiledIndex(compiled)
             logger.i(
                 TAG,
                 "index rebuilt: ${compiled.enabledCount} blocked, ${compiled.allowlistCount} allowlisted, digest ${compiled.digest.take(12)}",
             )
         }
+    }
+
+    /** Publishes a fully compiled index without exposing a partially built engine. */
+    fun publishCompiledIndex(compiled: CompiledIndex) {
+        publishedIndex.set(PublishedIndex(DecisionEngine(compiled.index), compiled))
+        _state.value = BlocklistSnapshot(
+            compiled = compiled,
+            stats = BlocklistStats(
+                databaseVersion = compiled.sourceVersion,
+                enabledRuleCount = compiled.enabledCount,
+                allowlistedRuleCount = compiled.allowlistCount,
+                lastLoadedEpochMs = wallClock.nowEpochMillis(),
+                integrityDigest = compiled.digest,
+                updateState = UpdateState.IDLE,
+            ),
+            sourceVersion = compiled.sourceVersion,
+        )
     }
 
     /** Adds an allowlist rule; rebuilds the index. */
@@ -140,8 +150,8 @@ class BlocklistRepository @Inject constructor(
     }
 
     override fun decide(host: String, scheduleActive: Boolean): BlockDecision {
-        val e = engine
-        if (e == null) {
+        val active = publishedIndex.get()
+        if (active == null) {
             return BlockDecision(
                 decision = dev.gamblock.core.model.DecisionKind.ALLOW,
                 ruleHit = null,
@@ -149,7 +159,7 @@ class BlocklistRepository @Inject constructor(
                 reason = "blocklist index not ready: fail-open",
             )
         }
-        val decision = e.decide(host, scheduleActive)
+        val decision = active.engine.decide(host, scheduleActive)
         if (decision.decision == dev.gamblock.core.model.DecisionKind.BLOCK) {
             val exceptions = exceptionOverlay
             if (exceptions.isNotEmpty()) {
