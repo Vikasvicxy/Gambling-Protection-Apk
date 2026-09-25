@@ -10,11 +10,11 @@
         android:pivotX="54"
         android:pivotY="54">
         <path
-            android:fillColor="@color/ic_launcher_foreground"
+            android:fillColor="#FFFFFFFF"
             android:pathData="M54,18 L82,29 L82,48 C82,70 70,86 54,92 C38,86 26,70 26,48 L26,29 Z" />
         <path
-            android:fillColor="@android:color/transparent"
-            android:strokeColor="@color/ic_launcher_background"
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFFFF"
             android:strokeWidth="5"
             android:strokeLineCap="round"
             android:strokeLineJoin="round"

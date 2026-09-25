@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#061F2A</color>
+    <color name="shield_surface">#0B1F27</color>
+    <color name="ic_launcher_foreground">#35E0C4</color>
+</resources>

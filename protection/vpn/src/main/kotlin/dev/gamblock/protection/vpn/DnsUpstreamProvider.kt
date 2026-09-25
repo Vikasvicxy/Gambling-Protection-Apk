@@ -45,6 +45,12 @@ class DnsUpstreamProvider @Inject constructor(
     @Volatile
     private var cacheRefreshedAtMs: Long = 0L
 
+    @Volatile
+    private var upstreamGeneration: Long = 0L
+
+    val generation: Long
+        get() = upstreamGeneration
+
     private val refreshLock = Any()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -80,14 +86,16 @@ class DnsUpstreamProvider @Inject constructor(
      * DNS servers to query on it. Never contains Shield's own tun address.
      */
     fun currentUpstream(): DnsUpstream {
-        if (cached.servers.isEmpty()) {
+        val now = System.currentTimeMillis()
+        if (cached.servers.isEmpty() && now - cacheRefreshedAtMs >= REFRESH_INTERVAL_MS) {
             synchronized(refreshLock) {
-                if (cached.servers.isEmpty()) {
+                if (cached.servers.isEmpty() && now - cacheRefreshedAtMs >= REFRESH_INTERVAL_MS) {
                     val found = scanPhysical()
                     if (found.servers.isNotEmpty()) {
+                        if (cached != found) upstreamGeneration++
                         cached = found
-                        cacheRefreshedAtMs = System.currentTimeMillis()
                     }
+                    cacheRefreshedAtMs = now
                 }
             }
         }
@@ -97,19 +105,24 @@ class DnsUpstreamProvider @Inject constructor(
     /** Compatibility accessor used by older call sites. */
     fun currentServers(): List<InetAddress> = currentUpstream().servers
 
+    fun refreshNow() {
+        refresh(force = true)
+    }
+
     private fun refresh(force: Boolean) {
         val now = System.currentTimeMillis()
         synchronized(refreshLock) {
             if (!force && now - cacheRefreshedAtMs < REFRESH_INTERVAL_MS) return
             val found = scanPhysical()
             if (found.servers.isNotEmpty()) {
+                if (cached != found) upstreamGeneration++
                 cached = found
                 cacheRefreshedAtMs = now
-            } else if (force) {
-                // The physical network is gone; drop stale resolvers so the next
-                // query re-discovers instead of hammering a dead resolver.
+            } else if (force && cached.servers.isNotEmpty()) {
                 cached = DnsUpstream(network = null, servers = emptyList())
+                upstreamGeneration++
             }
+            cacheRefreshedAtMs = now
         }
     }
 
