@@ -77,7 +77,6 @@ class ShieldVpnService : VpnService() {
 
     private var pfd: ParcelFileDescriptor? = null
     private val upstreamSemaphore = Semaphore(32)
-    private var roundRobin = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -192,6 +191,9 @@ class ShieldVpnService : VpnService() {
 
     private fun runTunLoop(input: InputStream, output: OutputStream) {
         val buffer = ByteArray(READ_SIZE)
+        // The shared buffer is parsed in place and only small slices are copied, so a
+        // large per-packet alloc is avoided on the hot path. handlePacket honors the
+        // byte count read instead of the buffer's full size.
         // VpnService hands out a non-blocking fd on some builds; poll() first so the loop
         // blocks with an idle tun instead of busy-spinning, but still wakes up instantly
         // when a packet is queued for us.
@@ -226,7 +228,7 @@ class ShieldVpnService : VpnService() {
             }
             if (!running) break
             try {
-                handlePacket(buffer.copyOfRange(0, n), output)
+                handlePacket(buffer, n, output)
             } catch (t: Throwable) {
                 // A single malformed packet must never kill the loop.
                 if (running) logger.w(Logs.DNS, "packet ignored: ${t.message}")
@@ -234,19 +236,19 @@ class ShieldVpnService : VpnService() {
         }
     }
 
-    private fun handlePacket(packet: ByteArray, output: OutputStream) {
-        val udp = IpPacketCodec.parseUdp(packet)
+    private fun handlePacket(packet: ByteArray, length: Int, output: OutputStream) {
+        val udp = IpPacketCodec.parseUdp(packet, length)
         if (udp == null) {
             // Non-DNS traffic on the tun (e.g. IPv6 router-solicitation, DoT probes) is ignored by design.
-            logger.d(Logs.DNS, "tun ${packet.size}B dropped: not IPv4/IPv6 UDP")
+            logger.d(Logs.DNS, "tun ${length}B dropped: not IPv4/IPv6 UDP")
             return
         }
         if (udp.dstPort != VpnConfig.DNS_PORT) {
-            logger.d(Logs.DNS, "tun ${packet.size}B dropped: dst port ${udp.dstPort} != ${VpnConfig.DNS_PORT}")
+            logger.d(Logs.DNS, "tun ${length}B dropped: dst port ${udp.dstPort} != ${VpnConfig.DNS_PORT}")
             return
         }
         if (!udp.dstAddress.contentEquals(VpnConfig.TUN_ADDR_BYTES)) {
-            logger.d(Logs.DNS, "tun ${packet.size}B dropped: dst not ${VpnConfig.TUN_ADDR}")
+            logger.d(Logs.DNS, "tun ${length}B dropped: dst not ${VpnConfig.TUN_ADDR}")
             return
         }
 
@@ -303,12 +305,30 @@ class ShieldVpnService : VpnService() {
                 // selection that keeps us off Shield's own tun address.
                 protect(socket)
                 upstream.network?.bindSocket(socket)
-                val server = upstream.servers[(roundRobin++) % upstream.servers.size]
-                socket.send(DatagramPacket(query, query.size, server, VpnConfig.DNS_PORT))
-                val reply = ByteArray(MAX_DNS_REPLY)
-                val datagram = DatagramPacket(reply, reply.size)
-                socket.receive(datagram)
-                reply.copyOf(datagram.length)
+                val candidates = UpstreamFallbackResolver.ordered(upstream.servers)
+                var attempts = 0
+                var lastError: Throwable? = null
+                for (server in candidates) {
+                    attempts++
+                    try {
+                        socket.send(DatagramPacket(query, query.size, server, VpnConfig.DNS_PORT))
+                        val reply = ByteArray(MAX_DNS_REPLY)
+                        val datagram = DatagramPacket(reply, reply.size)
+                        socket.receive(datagram)
+                        if (datagram.length > 0) {
+                            if (attempts > 1) {
+                                logger.w(Logs.DNS, "upstream fallback: answered by ${server.hostAddress} on attempt $attempts")
+                            }
+                            return reply.copyOf(datagram.length)
+                        }
+                    } catch (t: Throwable) {
+                        lastError = t
+                        if (!running) return null
+                        logger.d(Logs.DNS, "upstream ${server.hostAddress} failed: ${t.message}")
+                    }
+                }
+                logger.w(Logs.DNS, "all ${candidates.size} upstream(s) failed: ${lastError?.message}")
+                null
             } finally {
                 socket.close()
             }

@@ -124,6 +124,32 @@ class IpPacketCodecTest {
     }
 
     @Test
+    fun `parses a reusable buffer honoring the byte count`() {
+        val packet = ipv4Packet()
+        // Oversized shared buffer like the TUN loop's; only `packet.size` bytes are live.
+        val buffer = ByteArray(packet.size + 512)
+        System.arraycopy(packet, 0, buffer, 0, packet.size)
+
+        val parsed = IpPacketCodec.parseUdp(buffer, packet.size)
+        assertThat(parsed).isNotNull()
+        assertThat(parsed!!.payload.toList()).isEqualTo(payload.toList())
+
+        // Clipping bytes that belong to the payload shortens the parsed payload,
+        // rather than reading stale zeroed tail bytes.
+        val clipped = IpPacketCodec.parseUdp(buffer, packet.size - 2)
+        assertThat(clipped).isNotNull()
+        assertThat(clipped!!.payload).hasLength(payload.size - 2)
+
+        // Cutting into the UDP header invalidates the parse entirely.
+        assertThat(IpPacketCodec.parseUdp(buffer, 27)).isNull()
+    }
+
+    @Test
+    fun `length overload clamps to the buffer size`() {
+        assertThat(IpPacketCodec.parseUdp(ByteArray(32), length = 1_000_000)).isNull()
+    }
+
+    @Test
     fun `crafts a valid IPv4 response carrying the DNS payload`() {
         val crafted = IpPacketCodec.craftUdpResponse(
             family = IpPacketCodec.IPV4,

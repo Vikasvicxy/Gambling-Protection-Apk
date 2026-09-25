@@ -64,19 +64,33 @@ class OemInfoRepository @Inject constructor(
                 OemKind.XIAOMI, OemKind.REDMI, OemKind.POCO -> items += OemGuidanceItem(
                     id = "oem.xiaomi",
                     title = "MIUI autostart background",
-                    body = "Enable autostart, lock Shield in the recent-apps guard and allow 'No restrictions' again.\n\nActual settings: app info → battery saver → 'No restrictions'.",
+                    body = "Enable autostart, lock Shield in the recent-apps guard and allow 'No restrictions' again.",
+                    steps = listOf(
+                        "Settings → Apps → Manage apps → Shield → Autostart: on",
+                        "Open Recent apps, long-press Shield, tap the padlock to keep it in memory",
+                        "Settings → Battery → Battery saver → Shield → 'No restrictions'",
+                    ),
                     actionRoute = "diagnostics",
                 )
                 OemKind.OPPO, OemKind.REALME, OemKind.ONEPLUS, OemKind.VIVO -> items += OemGuidanceItem(
                     id = "oem.cn-battery",
                     title = "Aggressive battery police",
                     body = "Shield runs a foreground VPN service; give it 'Allow background running' in battery settings to avoid it being killed.",
+                    steps = listOf(
+                        "Settings → Battery → App battery management → Shield → 'Allow background running'",
+                        "Settings → App management → Shield → Allow self-start and auto-launch",
+                        "Lock Shield in the Recent apps view (drag down on its card)",
+                    ),
                     actionRoute = "diagnostics",
                 )
                 OemKind.NOTHING -> items += OemGuidanceItem(
                     id = "oem.nothing",
                     title = "Nothing OS background",
                     body = "Enable 'Pause app activity if unused' exemption for Shield in the app-specific battery screen.",
+                    steps = listOf(
+                        "Settings → Apps → Shield → Battery → 'Pause app activity if unused' → uncheck",
+                        "Settings → Battery → Background restriction → Shield → 'Unrestricted'",
+                    ),
                     actionRoute = "diagnostics",
                 )
                 OemKind.EMULATOR -> items += OemGuidanceItem(

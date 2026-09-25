@@ -12,48 +12,55 @@ object IpPacketCodec {
     const val IPV6 = 6
 
     /** Parses a raw tun packet (with IP header) into a [UdpPacket]. Returns null if unsupported. */
-    fun parseUdp(packet: ByteArray): UdpPacket? {
-        if (packet.size < 20) return null
+    fun parseUdp(packet: ByteArray): UdpPacket? = parseUdp(packet, packet.size)
+
+    /**
+     * Parses a raw tun packet, honoring [length] as the effective packet size so a
+     * shared reusable buffer can be parsed in place without per-packet copies.
+     */
+    fun parseUdp(packet: ByteArray, length: Int): UdpPacket? {
+        val limit = length.coerceIn(0, packet.size)
+        if (limit < 20) return null
         val version = (packet[0].toInt() ushr 4) and 0x0F
         return when (version) {
-            IPV4 -> parseIpv4(packet)
-            IPV6 -> parseIpv6(packet)
+            IPV4 -> parseIpv4(packet, limit)
+            IPV6 -> parseIpv6(packet, limit)
             else -> null
         }
     }
 
-    private fun parseIpv4(packet: ByteArray): UdpPacket? {
+    private fun parseIpv4(packet: ByteArray, limit: Int): UdpPacket? {
         val ihl = (packet[0].toInt() and 0x0F) * 4
-        if (ihl < 20 || packet.size < ihl) return null
+        if (ihl < 20 || limit < ihl) return null
         if ((packet[9].toInt() and 0xFF) != PROTOCOL_UDP) return null
         val src = packet.copyOfRange(12, 16)
         val dst = packet.copyOfRange(16, 20)
-        return parseUdpPayload(packet, ihl, src, dst)
+        return parseUdpPayload(packet, limit, ihl, src, dst)
     }
 
-    private fun parseIpv6(packet: ByteArray): UdpPacket? {
-        if (packet.size < 40) return null
+    private fun parseIpv6(packet: ByteArray, limit: Int): UdpPacket? {
+        if (limit < 40) return null
         var nextHeader = packet[6].toInt() and 0xFF
         var offset = 40
         var iterations = 0
         while (nextHeader != PROTOCOL_UDP && nextHeader != 59 && iterations < 8) {
             iterations++
-            if (offset + 8 > packet.size) return null
+            if (offset + 8 > limit) return null
             nextHeader = packet[offset].toInt() and 0xFF
             offset += 8 + ((packet[offset + 1].toInt() and 0xFF) * 8)
         }
-        if (nextHeader != PROTOCOL_UDP || offset + 8 > packet.size) return null
+        if (nextHeader != PROTOCOL_UDP || offset + 8 > limit) return null
         val src = packet.copyOfRange(8, 24)
         val dst = packet.copyOfRange(24, 40)
-        return parseUdpPayload(packet, offset, src, dst)
+        return parseUdpPayload(packet, limit, offset, src, dst)
     }
 
-    private fun parseUdpPayload(packet: ByteArray, udpOffset: Int, srcIp: ByteArray, dstIp: ByteArray): UdpPacket? {
-        if (udpOffset + 8 > packet.size) return null
+    private fun parseUdpPayload(packet: ByteArray, limit: Int, udpOffset: Int, srcIp: ByteArray, dstIp: ByteArray): UdpPacket? {
+        if (udpOffset + 8 > limit) return null
         val srcPort = ((packet[udpOffset].toInt() and 0xFF) shl 8) or (packet[udpOffset + 1].toInt() and 0xFF)
         val dstPort = ((packet[udpOffset + 2].toInt() and 0xFF) shl 8) or (packet[udpOffset + 3].toInt() and 0xFF)
         val len = ((packet[udpOffset + 4].toInt() and 0xFF) shl 8) or (packet[udpOffset + 5].toInt() and 0xFF)
-        val payloadLen = (len - 8).coerceAtMost(packet.size - udpOffset - 8)
+        val payloadLen = (len - 8).coerceAtMost(limit - udpOffset - 8)
         if (payloadLen <= 0) return null
         val payload = packet.copyOfRange(udpOffset + 8, udpOffset + 8 + payloadLen)
         return UdpPacket(
