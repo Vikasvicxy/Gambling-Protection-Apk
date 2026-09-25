@@ -26,7 +26,30 @@
 # Room generated code (KSP-generated implementations carry the same package names).
 -dontwarn androidx.room.**
 -keep class * extends androidx.room.RoomDatabase { <init>(); }
--keep @androidx.room.Entity class * { *; }
 
 # Coroutines on classpath.
+-keepnames class kotlinx.coroutines.**
+-keepclassmembers class kotlinx.coroutines.** {
+    volatile <fields>;
+}
 -dontwarn kotlinx.coroutines.**
+
+-keep @dagger.hilt.android.AndroidEntryPoint class * { *; }
+-keep @dagger.hilt.android.HiltAndroidApp class * { *; }
+-keep @androidx.hilt.work.HiltWorker class * { *; }
+
+-keep @androidx.room.Entity class * { *; }
+-keep @androidx.room.Dao interface * { *; }
+-keep @androidx.room.TypeConverter class * { *; }
+-keep @androidx.room.TypeConverters class * { *; }
+
+-keep @androidx.work.ListenableWorker class * { *; }
+-keep @androidx.work.CoroutineWorker class * { *; }
+-keep @androidx.work.Worker class * { *; }
+
+-keep class dev.gamblock.protection.dns.** { *; }
+-keep class dev.gamblock.core.release.** { *; }
+-keep class dev.gamblock.core.integrity.** { *; }
+-keep class dev.gamblock.core.model.** { *; }
+-keep class dev.gamblock.data.preferences.** { *; }
+-keep class dev.gamblock.**$$serializer { *; }
