@@ -56,14 +56,34 @@ fun DiagnosticsRoute(
 
             state.conflict?.let { conflict ->
                 ShieldCard(title = "VPN conflict") {
-                    ShieldText(
-                        text = "Another VPN active: ${conflict.activeNetworkUsesVpnTransport} · Transports: ${conflict.activeTransportNames}",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    ShieldText(
-                        text = "Only one VPN can run at a time. Turn off the other VPN app (or use its split-tunnel) before enabling Shield.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    when {
+                        conflict.activeNetworkVpnIsShield -> {
+                            ShieldText(
+                                text = "Active VPN transport: Shield (own tunnel) - healthy",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            ShieldText(
+                                text = "Shield's local DNS-only VPN is the active network. This is expected, not a conflict.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        conflict.activeNetworkUsesVpnTransport -> {
+                            ShieldText(
+                                text = "Another VPN active: true · Transports: ${conflict.activeTransportNames}",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            ShieldText(
+                                text = "Only one VPN can run at a time. Turn off the other VPN app (or use its split-tunnel) before enabling Shield.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        else -> {
+                            ShieldText(
+                                text = "Another VPN active: false · Transports: ${conflict.activeTransportNames}",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
                 }
                 Spacer(Modifier.height(16.dp))
             }

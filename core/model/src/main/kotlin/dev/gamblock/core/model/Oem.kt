@@ -51,8 +51,10 @@ data class OemGuidanceItem(
 
 @Serializable
 data class VpnConflictInfo(
-    /** True when the currently active network uses the VPN transport (another app's VPN). */
+    /** True when the currently active network uses the VPN transport AND it is another app's VPN. */
     val activeNetworkUsesVpnTransport: Boolean,
+    /** True when the active VPN transport belongs to Shield's own tunnel (expected, not a conflict). */
+    val activeNetworkVpnIsShield: Boolean = false,
     /** True when the default network is present at all. */
     val hasDefaultNetwork: Boolean,
     /** Names of transports observed on the current network. */

@@ -17,6 +17,7 @@ import dev.gamblock.core.model.OemGuidanceItem
 import dev.gamblock.core.model.OemInfo
 import dev.gamblock.core.model.OemKind
 import dev.gamblock.core.model.VpnConflictInfo
+import dev.gamblock.protection.vpn.VpnStateStore
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,6 +25,7 @@ import javax.inject.Singleton
 @Singleton
 class OemInfoRepository @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val vpnStateStore: VpnStateStore,
     private val logger: ShieldLogger,
 ) {
     private val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
@@ -103,8 +105,9 @@ class OemInfoRepository @Inject constructor(
                     if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH)) add("BLUETOOTH")
                     if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI_AWARE)) add("WIFI_AWARE")
                 }
-                VpnConflictInfo(
-                    activeNetworkUsesVpnTransport = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true,
+                VpnConflictResolver.resolve(
+                    activeNetworkHasVpnTransport = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true,
+                    shieldVpnActive = activeVpnIsShield(capabilities),
                     hasDefaultNetwork = active != null,
                     activeTransportNames = transportNames,
                 )
@@ -113,6 +116,25 @@ class OemInfoRepository @Inject constructor(
                 VpnConflictInfo(activeNetworkUsesVpnTransport = false, hasDefaultNetwork = false, activeTransportNames = emptyList())
             }
         }
+
+    /**
+     * True when the active network's VPN transport belongs to Shield. On API 29+ the
+     * platform exposes the creating UID on [NetworkCapabilities], which is exact;
+     * below that we trust the process-local VPN service state.
+     */
+    private fun activeVpnIsShield(capabilities: NetworkCapabilities?): Boolean {
+        if (capabilities == null) return false
+        if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+        ) {
+            return try {
+                capabilities.getOwnerUid() == context.applicationInfo.uid
+            } catch (t: Throwable) {
+                vpnStateStore.state.value.isRunning
+            }
+        }
+        return vpnStateStore.state.value.isRunning
+    }
 
     private fun readChargingState(): Boolean {
         return try {

@@ -46,4 +46,4 @@ dist-test/
 *.ap_
 *.dex
 .cxx/
-*.hprof
+*.hprof**/C:\grhome-m2/

@@ -269,15 +269,20 @@ class ShieldVpnService : VpnService() {
     }
 
     private fun forwardQuery(udp: UdpPacket, query: ByteArray): ByteArray? {
-        val servers = upstreamProvider.currentServers()
-        if (servers.isEmpty()) return null
+        val upstream = upstreamProvider.currentUpstream()
+        if (upstream.servers.isEmpty()) return null
         if (!upstreamSemaphore.tryAcquire(2, TimeUnit.SECONDS)) return null
         return try {
             val socket = DatagramSocket()
             try {
                 socket.soTimeout = UPSTREAM_TIMEOUT_MS
+                // protect() routes the socket around the tunnel; binding it to the
+                // physical network additionally guarantees the query can never re-enter
+                // the tun (loop prevention). See DnsUpstreamProvider for the resolver
+                // selection that keeps us off Shield's own tun address.
                 protect(socket)
-                val server = servers[(roundRobin++) % servers.size]
+                upstream.network?.bindSocket(socket)
+                val server = upstream.servers[(roundRobin++) % upstream.servers.size]
                 socket.send(DatagramPacket(query, query.size, server, VpnConfig.DNS_PORT))
                 val reply = ByteArray(MAX_DNS_REPLY)
                 val datagram = DatagramPacket(reply, reply.size)

@@ -33,6 +33,7 @@ dependencies {
     api(project(":core:common"))
     api(project(":core:model"))
     api(project(":core:database"))
+    implementation(project(":protection:vpn"))
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
