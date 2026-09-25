@@ -42,9 +42,11 @@ dependencies {
     implementation(project(":data:repository"))
     implementation(project(":data:blocklist"))
     implementation(project(":protection:health"))
+    implementation(project(":protection:tamper"))
     implementation(project(":protection:vpn"))
 
     implementation(platform(libs.compose.bom))
+    implementation(libs.androidx.activity.compose)
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
     implementation(libs.compose.foundation)

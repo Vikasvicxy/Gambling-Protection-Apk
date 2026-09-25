@@ -14,8 +14,10 @@ import dev.gamblock.data.repository.CommitmentEngine
 import dev.gamblock.data.preferences.SettingsRepository
 import dev.gamblock.data.preferences.SettingsState
 import dev.gamblock.protection.health.HealthEngine
+import dev.gamblock.protection.tamper.LockscreenAuthGate
 import dev.gamblock.protection.vpn.VpnStateStore
 import javax.inject.Inject
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -42,9 +44,15 @@ class DashboardViewModel @Inject constructor(
     private val blockEventRepository: BlockEventRepository,
     private val commitmentEngine: CommitmentEngine,
     private val healthEngine: HealthEngine,
+    val lockscreenGate: LockscreenAuthGate,
 ) : ViewModel() {
 
     private val _health = MutableStateFlow<HealthReport?>(null)
+
+    private val _gateMessage = MutableStateFlow<String?>(null)
+    val gateMessage: StateFlow<String?> = _gateMessage.asStateFlow()
+
+    private var gateMessageJob: kotlinx.coroutines.Job? = null
 
     private val core: StateFlow<DashboardUiState> = combine(
         settingsRepository.settings,
@@ -78,6 +86,20 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.setVpnEnabled(enabled)
         }
+    }
+
+    /** Shows a transient banner (e.g. "Set a device lock in Settings first"). */
+    fun showGateMessage(message: String) {
+        gateMessageJob?.cancel()
+        gateMessageJob = viewModelScope.launch {
+            _gateMessage.value = message
+            delay(GATE_MESSAGE_MS)
+            _gateMessage.value = null
+        }
+    }
+
+    companion object {
+        private const val GATE_MESSAGE_MS = 4_000L
     }
 
     fun refreshHealth() {

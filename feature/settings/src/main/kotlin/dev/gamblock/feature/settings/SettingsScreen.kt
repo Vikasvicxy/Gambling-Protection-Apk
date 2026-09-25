@@ -192,6 +192,26 @@ fun SettingsRoute(
 
             Spacer(Modifier.height(16.dp))
 
+            ShieldCard(title = "Protection lock") {
+                ShieldText(
+                    "Protect sensitive actions with your device PIN, pattern, or biometric. " +
+                        "Only visible once a device lock is configured.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                ToggleRow(
+                    label = "Lock turning off protection",
+                    checked = state.requireAuthBeforeDisable,
+                    onToggle = { viewModel.setRequireAuthBeforeDisable(it) },
+                )
+                ToggleRow(
+                    label = "Lock clearing history",
+                    checked = state.requireAuthBeforeClearHistory,
+                    onToggle = { viewModel.setRequireAuthBeforeClearHistory(it) },
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
             ShieldCard(title = "Privacy") {
                 ShieldText(
                     "Everything is stored on this device. No account, no analytics, no network calls to Shield servers.",

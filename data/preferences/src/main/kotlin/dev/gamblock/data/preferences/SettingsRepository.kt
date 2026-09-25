@@ -39,6 +39,8 @@ data class SettingsState(
     val greetPersonalizationName: String = "",
     val hapticsEnabled: Boolean = true,
     val notificationsEnabled: Boolean = true,
+    val requireAuthBeforeDisable: Boolean = false,
+    val requireAuthBeforeClearHistory: Boolean = false,
 )
 
 @Singleton
@@ -105,6 +107,10 @@ class SettingsRepository @Inject constructor(
     suspend fun setHaptics(enabled: Boolean) = update { it.copy(hapticsEnabled = enabled) }
 
     suspend fun setNotifications(enabled: Boolean) = update { it.copy(notificationsEnabled = enabled) }
+
+    suspend fun setRequireAuthBeforeDisable(enabled: Boolean) = update { it.copy(requireAuthBeforeDisable = enabled) }
+
+    suspend fun setRequireAuthBeforeClearHistory(enabled: Boolean) = update { it.copy(requireAuthBeforeClearHistory = enabled) }
 
     companion object {
         private val SETTINGS_JSON = stringPreferencesKey("settings_json")

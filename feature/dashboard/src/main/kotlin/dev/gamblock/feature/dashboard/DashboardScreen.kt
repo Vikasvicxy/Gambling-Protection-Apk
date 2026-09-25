@@ -1,5 +1,8 @@
 package dev.gamblock.feature.dashboard
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -25,6 +28,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -43,6 +49,8 @@ import dev.gamblock.core.designsystem.component.ShieldText
 import dev.gamblock.core.designsystem.theme.ShieldPalette
 import dev.gamblock.core.model.BlockAttemptGroup
 import dev.gamblock.core.model.HealthStatus
+import dev.gamblock.protection.tamper.LockscreenAuthOutcome
+import dev.gamblock.protection.tamper.LockscreenAuthPolicy
 
 private enum class ProtectionStatus { ACTIVE, DEGRADED, OFF }
 
@@ -53,6 +61,17 @@ private fun protectionStatus(enabled: Boolean, vpnRunning: Boolean, health: Heal
         health == HealthStatus.CRITICAL || health == HealthStatus.DEGRADED -> ProtectionStatus.DEGRADED
         else -> ProtectionStatus.ACTIVE
     }
+
+/** Applies a protection toggle once gating (device credential) has cleared. */
+private fun applyProtectionToggle(
+    enabled: Boolean,
+    viewModel: DashboardViewModel,
+    onEnableProtection: () -> Unit,
+    onDisableProtection: () -> Unit,
+) {
+    viewModel.setProtectionEnabled(enabled)
+    if (enabled) onEnableProtection() else onDisableProtection()
+}
 
 private val ProtectionStatus.accent: Color
     get() = when (this) {
@@ -72,6 +91,46 @@ fun DashboardRoute(
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val gateMessage by viewModel.gateMessage.collectAsStateWithLifecycle()
+    var pendingToggle by remember { mutableStateOf<Boolean?>(null) }
+
+    val authLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val requested = pendingToggle
+        pendingToggle = null
+        if (requested != null) {
+            val outcome = LockscreenAuthPolicy.onPromptResult(
+                requireAuth = true,
+                deviceProtected = viewModel.lockscreenGate.isDeviceProtected(),
+                granted = result.resultCode == Activity.RESULT_OK,
+            )
+            if (outcome == LockscreenAuthOutcome.ALLOW) {
+                applyProtectionToggle(requested, viewModel, onEnableProtection, onDisableProtection)
+            }
+        }
+    }
+
+    fun handleProtectionToggle(enabled: Boolean) {
+        if (!enabled && state.settings.requireAuthBeforeDisable) {
+            val gate = viewModel.lockscreenGate
+            if (gate.isDeviceProtected()) {
+                pendingToggle = enabled
+                val intent = gate.confirmIntent(
+                    "Disable Shield protection",
+                    "Enter your device PIN, pattern, or biometric to turn Shield off.",
+                )
+                if (intent != null) authLauncher.launch(intent)
+            } else {
+                viewModel.showGateMessage(
+                    "Protection lock is on but no device lock is set. " +
+                        "Set a device lock in system Settings first.",
+                )
+            }
+        } else {
+            applyProtectionToggle(enabled, viewModel, onEnableProtection, onDisableProtection)
+        }
+    }
 
     ShieldScaffold(
         title = "Shield",
@@ -97,11 +156,17 @@ fun DashboardRoute(
                     bypasses = state.vpn.exceptionsApplied,
                     enabled = state.settings.vpnEnabled,
                     hapticsEnabled = state.settings.hapticsEnabled,
-                    onToggle = {
-                        viewModel.setProtectionEnabled(it)
-                        if (it) onEnableProtection() else onDisableProtection()
-                    },
+                    onToggle = ::handleProtectionToggle,
                 )
+
+                gateMessage?.let { message ->
+                    Spacer(Modifier.height(8.dp))
+                    ShieldText(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ShieldPalette.Orange,
+                    )
+                }
 
                 Spacer(Modifier.height(16.dp))
 

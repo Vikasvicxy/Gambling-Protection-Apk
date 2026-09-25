@@ -39,6 +39,14 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setNotifications(enabled) }
     }
 
+    fun setRequireAuthBeforeDisable(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setRequireAuthBeforeDisable(enabled) }
+    }
+
+    fun setRequireAuthBeforeClearHistory(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setRequireAuthBeforeClearHistory(enabled) }
+    }
+
     fun setGreetName(name: String) {
         viewModelScope.launch { settingsRepository.setGreetName(name) }
     }
