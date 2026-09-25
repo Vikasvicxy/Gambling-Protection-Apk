@@ -21,6 +21,16 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    buildTypes {
+        debug {
+            buildConfigField("boolean", "REVIEWER_MODE_ENABLED", "true")
+        }
+        release {
+            buildConfigField("boolean", "REVIEWER_MODE_ENABLED", "false")
+        }
     }
 
     testOptions {
@@ -40,6 +50,7 @@ dependencies {
     implementation(project(":core:design-system"))
     implementation(project(":data:blocklist"))
     implementation(project(":data:repository"))
+    implementation(project(":data:preferences"))
     implementation(project(":protection:health"))
     implementation(project(":protection:vpn"))
     implementation(project(":protection:oem"))

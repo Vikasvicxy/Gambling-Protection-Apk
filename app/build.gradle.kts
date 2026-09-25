@@ -16,6 +16,8 @@ val keystoreProperties = Properties().apply {
         FileInputStream(keystorePropertiesFile).use { load(it) }
     }
 }
+val configuredStoreFile = keystoreProperties.getProperty("storeFile")?.takeIf { it.isNotBlank() }
+val hasReleaseSigning = configuredStoreFile?.let { file(it).isFile } == true
 
 android {
     namespace = "dev.gamblock.shield"
@@ -49,17 +51,21 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            buildConfigField("boolean", "REVIEWER_MODE_ENABLED", "true")
         }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            buildConfigField("boolean", "REVIEWER_MODE_ENABLED", "false")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            if (keystorePropertiesFile.exists()) {
-                signingConfig = signingConfigs.getByName("release")
-            }
         }
     }
 
@@ -70,7 +76,7 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = false
+        buildConfig = true
     }
 
     packaging {

@@ -2,7 +2,6 @@ package dev.gamblock.feature.diagnostics
 
 import android.content.Context
 import android.content.Intent
-import android.net.VpnService
 import android.provider.Settings
 import android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS
 import androidx.lifecycle.ViewModel
@@ -17,6 +16,7 @@ import dev.gamblock.core.model.HealthStatus
 import dev.gamblock.core.model.OemGuidanceItem
 import dev.gamblock.core.model.OemInfo
 import dev.gamblock.core.model.VpnConflictInfo
+import dev.gamblock.data.preferences.ReviewerModeRepository
 import dev.gamblock.protection.health.HealthEngine
 import dev.gamblock.protection.oem.OemInfoRepository
 import javax.inject.Inject
@@ -54,8 +54,11 @@ class DiagnosticsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val healthEngine: HealthEngine,
     private val oemInfoRepository: OemInfoRepository,
+    private val reviewerModeRepository: ReviewerModeRepository,
     private val logger: ShieldLogger,
 ) : ViewModel() {
+
+    val reviewerModeEnabled = reviewerModeRepository.enabled
 
     private val _state = MutableStateFlow(DiagnosticsUiState())
     val state: StateFlow<DiagnosticsUiState> = _state.asStateFlow()
@@ -75,6 +78,11 @@ class DiagnosticsViewModel @Inject constructor(
                 isCharging = oemInfoRepository.batteryStatus.isCharging,
             )
         }
+    }
+
+    fun setReviewerModeEnabled(enabled: Boolean) {
+        if (!BuildConfig.REVIEWER_MODE_ENABLED) return
+        viewModelScope.launch { reviewerModeRepository.setEnabled(enabled) }
     }
 
     /** True when we can offer a one-tap system "Fix" for a degraded component. */
@@ -97,13 +105,7 @@ class DiagnosticsViewModel @Inject constructor(
     }
 
     private fun fixIntent(component: HealthComponent): Intent? = when (component) {
-        HealthComponent.VPN -> {
-            val prepare = VpnService.prepare(context)
-            when {
-                prepare != null -> prepare
-                else -> context.packageManager.getLaunchIntentForPackage(context.packageName)
-            }
-        }
+        HealthComponent.VPN -> context.packageManager.getLaunchIntentForPackage(context.packageName)
         HealthComponent.BATTERY -> Intent(
             Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
         ).setData(android.net.Uri.parse("package:${context.packageName}"))

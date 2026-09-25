@@ -10,6 +10,9 @@ interface DomainBlocker {
     /** Number of active (non-allowlist) rules in the currently compiled index. */
     val ruleCount: Int
 
+    val isReady: Boolean
+        get() = true
+
     /** Decides a host. [scheduleActive] gates enforcement (schedule windows). */
     fun decide(host: String, scheduleActive: Boolean): BlockDecision
 }

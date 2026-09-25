@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,6 +42,7 @@ fun DiagnosticsRoute(
     viewModel: DiagnosticsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val reviewerModeEnabled by viewModel.reviewerModeEnabled.collectAsStateWithLifecycle()
 
     ShieldScaffold(title = "Diagnostics", content = { padding ->
         Column(
@@ -54,6 +56,31 @@ fun DiagnosticsRoute(
                 ShieldCard(title = "Device") {
                     ShieldText("${oem.manufacturer} ${oem.model} (${oem.kind})", style = MaterialTheme.typography.bodyMedium)
                     ShieldText("Android ${oem.androidRelease} (API ${oem.androidSdk})", style = MaterialTheme.typography.bodySmall)
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+
+            if (BuildConfig.REVIEWER_MODE_ENABLED) {
+                ShieldCard(title = "Reviewer demo mode") {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        ShieldText(
+                            "Simulate blocking with reserved .test domains",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(
+                            checked = reviewerModeEnabled,
+                            onCheckedChange = viewModel::setReviewerModeEnabled,
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    ShieldText(
+                        "When enabled, reviewer-blocked.test, demo-casino.test, and demo-sportsbook.test are blocked. reviewer-allowed.test remains available for comparison. This mode is disabled in release builds.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
                 Spacer(Modifier.height(16.dp))
             }

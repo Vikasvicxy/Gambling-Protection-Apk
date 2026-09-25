@@ -42,6 +42,7 @@ fun SettingsRoute(
     onBack: () -> Unit,
     onOpenAccountability: () -> Unit = {},
     onOpenParent: () -> Unit = {},
+    onOpenPrivacyPolicy: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -214,9 +215,16 @@ fun SettingsRoute(
 
             ShieldCard(title = "Privacy") {
                 ShieldText(
-                    "Everything is stored on this device. No account, no analytics, no network calls to Shield servers.",
+                    "Core DNS filtering and local settings stay on this device. Shield has no advertising SDK, analytics, or remote tracking. Signed rule updates and optional accountability features are explained in the offline policy.",
                     style = MaterialTheme.typography.bodySmall,
                 )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = onOpenPrivacyPolicy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Read Privacy Policy & Terms")
+                }
             }
         }
     })

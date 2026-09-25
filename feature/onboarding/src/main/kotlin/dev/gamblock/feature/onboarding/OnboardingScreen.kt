@@ -124,8 +124,9 @@ private fun welcomeStep() {
         style = MaterialTheme.typography.titleLarge,
     )
     ShieldText(
-        text = "Your browsing history, app usage and blocked domains stay on this device. " +
-            "There is no account, no telemetry and no network calls to a Shield server.",
+        text = "Core DNS filtering, local preferences, and blocked-domain counters stay on this device. " +
+            "Shield has no advertising SDK, analytics, or remote tracking. Signed blocklist updates may be " +
+            "downloaded over HTTPS, and optional accountability features share only the information you explicitly enable.",
         style = MaterialTheme.typography.bodyMedium,
         modifier = Modifier.padding(top = 8.dp),
     )
@@ -138,10 +139,10 @@ private fun howItWorksStep() {
         style = MaterialTheme.typography.titleLarge,
     )
     ShieldText(
-        text = "Shield creates a VPN tunnel that only carries domain lookups. It answers " +
-            "blocked domains itself - nothing leaves your phone - and forwards everything " +
-            "else to your normal network DNS. No website contents are inspected and " +
-            "nothing is uploaded.",
+        text = "Shield creates a VPN tunnel that only carries DNS hostname lookups. It answers " +
+            "blocked domains locally and forwards other lookups to your normal network DNS. " +
+            "No website contents are inspected or collected. Signed rules may be updated over HTTPS, " +
+            "while optional accountability sharing remains off unless you enable it.",
         style = MaterialTheme.typography.bodyMedium,
         modifier = Modifier.padding(top = 8.dp),
     )

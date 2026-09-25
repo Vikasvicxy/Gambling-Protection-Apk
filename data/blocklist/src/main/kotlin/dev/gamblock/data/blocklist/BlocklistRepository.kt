@@ -69,6 +69,9 @@ class BlocklistRepository @Inject constructor(
     override val ruleCount: Int
         get() = _state.value?.compiled?.enabledCount ?: 0
 
+    override val isReady: Boolean
+        get() = engine != null
+
     /** Loads the seed once, then compiles the working index. Idempotent. */
     suspend fun initialize() {
         withContext(dispatchers.io) {

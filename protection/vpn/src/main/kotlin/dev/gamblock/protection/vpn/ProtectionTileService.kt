@@ -1,7 +1,6 @@
 package dev.gamblock.protection.vpn
 
 import android.graphics.drawable.Icon
-import android.net.VpnService
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import dagger.hilt.android.AndroidEntryPoint
@@ -72,13 +71,10 @@ class ProtectionTileService : TileService() {
             ProtectionTileUi.INACTIVE,
             ProtectionTileUi.UNAVAILABLE,
             ProtectionTileUi.CONNECTING -> {
-                val prepare = VpnService.prepare(this)
-                if (prepare == null) {
-                    scope.launch { settingsRepository.setVpnEnabled(true) }
-                    ShieldVpnService.launch(this)
-                    logger.i(Logs.VPN, "tile: protection on")
-                } else {
-                    startActivityAndCollapse(prepare)
+                val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+                if (launchIntent != null) {
+                    launchIntent.putExtra("dev.gamblock.shield.extra.NAV_DESTINATION", "setup")
+                    startActivityAndCollapse(launchIntent)
                 }
             }
         }
