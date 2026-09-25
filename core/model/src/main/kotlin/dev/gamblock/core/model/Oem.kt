@@ -47,6 +47,8 @@ data class OemGuidanceItem(
     val title: String,
     val body: String,
     val actionRoute: String? = null,
+    /** Optional numbered step-by-step walkthrough for aggressive background-task killers. */
+    val steps: List<String> = emptyList(),
 )
 
 @Serializable

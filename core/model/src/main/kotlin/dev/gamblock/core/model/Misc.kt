@@ -10,6 +10,8 @@ data class VpnRuntimeState(
     val queriesHandled: Long = 0L,
     val queriesBlocked: Long = 0L,
     val queriesAllowed: Long = 0L,
+    /** Queries the block engine would have blocked but a custom user exception let through. */
+    val exceptionsApplied: Long = 0L,
     val failure: VpnFailure? = null,
     /** True when the VPN service was explicitly stopped by the user request. */
     val userStopped: Boolean = false,
