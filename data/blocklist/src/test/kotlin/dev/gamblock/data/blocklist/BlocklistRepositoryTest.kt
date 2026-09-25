@@ -2,11 +2,14 @@ package dev.gamblock.data.blocklist
 
 import com.google.common.truth.Truth.assertThat
 import dev.gamblock.core.database.ShieldDatabase
+import dev.gamblock.core.model.BlockStatus
 import dev.gamblock.core.model.DecisionKind
+import dev.gamblock.core.model.DomainRecord
 import dev.gamblock.core.model.UpdateState
 import dev.gamblock.core.testing.FakeWallClock
 import dev.gamblock.core.testing.NoOpLogger
 import dev.gamblock.core.testing.TestDispatchersProvider
+import dev.gamblock.protection.domainengine.DomainIndexCompiler
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -39,6 +42,31 @@ class BlocklistRepositoryTest {
         val decision = repo.decide("bet-example.test", scheduleActive = true)
         assertThat(decision.decision).isEqualTo(DecisionKind.ALLOW)
         assertThat(decision.reason).contains("fail-open")
+    }
+
+    @Test
+    fun `publishing a compiled index gates readiness and switches the hot path`() {
+        assertThat(repo.isReady).isFalse()
+        assertThat(repo.decide("blocked.test", true).decision).isEqualTo(DecisionKind.ALLOW)
+
+        val first = DomainIndexCompiler.compile(
+            listOf(DomainRecord("blocked.test", "blocked.test", status = BlockStatus.ACTIVE)),
+            sourceVersion = 1,
+        )
+        repo.publishCompiledIndex(first)
+
+        assertThat(repo.isReady).isTrue()
+        assertThat(repo.decide("blocked.test", true).decision).isEqualTo(DecisionKind.BLOCK)
+
+        val replacement = DomainIndexCompiler.compile(
+            listOf(DomainRecord("new-blocked.test", "new-blocked.test", status = BlockStatus.ACTIVE)),
+            sourceVersion = 2,
+        )
+        repo.publishCompiledIndex(replacement)
+
+        assertThat(repo.decide("blocked.test", true).decision).isEqualTo(DecisionKind.ALLOW)
+        assertThat(repo.decide("new-blocked.test", true).decision).isEqualTo(DecisionKind.BLOCK)
+        assertThat(repo.state.value!!.sourceVersion).isEqualTo(2)
     }
 
     @Test
