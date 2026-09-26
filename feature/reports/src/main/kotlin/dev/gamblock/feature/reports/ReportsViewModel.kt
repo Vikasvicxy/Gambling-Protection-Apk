@@ -7,6 +7,7 @@ import dev.gamblock.data.preferences.SettingsRepository
 import dev.gamblock.data.repository.ActivityEventRepository
 import dev.gamblock.data.repository.BlockEventRepository
 import dev.gamblock.data.repository.FalsePositiveReportRepository
+import dev.gamblock.data.repository.ProtectionGateHolder
 import dev.gamblock.protection.tamper.LockscreenAuthGate
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +24,7 @@ class ReportsViewModel @Inject constructor(
     private val activityEventRepository: ActivityEventRepository,
     private val falsePositiveReportRepository: FalsePositiveReportRepository,
     private val settingsRepository: SettingsRepository,
+    private val gateHolder: ProtectionGateHolder,
     val lockscreenGate: LockscreenAuthGate,
 ) : ViewModel() {
 
@@ -45,9 +47,13 @@ class ReportsViewModel @Inject constructor(
 
     val submittedReports = falsePositiveReportRepository.observeRecent(20)
 
+    /**
+     * Clearing history erases the evidence the user committed to keeping, so it
+     * is a gated action on top of the existing device-lock prompt.
+     */
     fun clearHistory() {
         viewModelScope.launch {
-            blockEventRepository.clear()
+            gateHolder.requestSensitiveChange { blockEventRepository.clear() }
         }
     }
 

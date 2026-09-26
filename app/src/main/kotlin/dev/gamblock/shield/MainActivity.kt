@@ -48,6 +48,7 @@ import dev.gamblock.data.preferences.TimingAnchorRepository
 import dev.gamblock.data.preferences.VpnDisclosureRepository
 import dev.gamblock.data.repository.CommitmentEngine
 import dev.gamblock.data.repository.ProtectionEnforcer
+import dev.gamblock.data.repository.ProtectionGateHolder
 import dev.gamblock.feature.onboarding.OnboardingViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.launch
@@ -59,6 +60,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var timingAnchorRepository: TimingAnchorRepository
     @Inject lateinit var commitmentEngine: CommitmentEngine
     @Inject lateinit var vpnDisclosureRepository: VpnDisclosureRepository
+    @Inject lateinit var protectionGateHolder: ProtectionGateHolder
 
     private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -87,6 +89,7 @@ class MainActivity : ComponentActivity() {
             var showDisclosure by rememberSaveable { mutableStateOf(false) }
             var disclosureBusy by remember { mutableStateOf(false) }
             var disclosureError by remember { mutableStateOf<String?>(null) }
+            val gateState by protectionGateHolder.state.collectAsStateWithLifecycle()
 
             ShieldTheme {
                 ShieldApp(
@@ -100,7 +103,29 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     },
-                    onDisableProtection = { protectionEnforcer.stopNow("user toggle") },
+                    onDisableProtection = {
+                        lifecycleScope.launch {
+                            // Every disable path funnels through the shared gate so a
+                            // Fortress window, the Guardian PIN and the urge timer
+                            // cannot be skipped by using a different screen.
+                            protectionGateHolder.request {
+                                protectionEnforcer.stopNow("user toggle")
+                            }
+                        }
+                    },
+                    onOpenIronShieldSettings = { navigate ->
+                        // The Iron Shield screen holds the Fortress, Guardian PIN
+                        // and DNS-defense controls, so reaching it is a protected
+                        // change in its own right.
+                        lifecycleScope.launch {
+                            protectionGateHolder.requestSensitiveChange { navigate() }
+                        }
+                    },
+                )
+
+                dev.gamblock.feature.dashboard.ProtectionGateDialog(
+                    state = gateState,
+                    holder = protectionGateHolder,
                 )
 
                 if (showDisclosure) {
@@ -158,6 +183,10 @@ private val ALLOWED_DESTINATIONS = setOf(
     "accountability",
     "parent",
     "support",
+    "recovery",
+    "urge_surfer",
+    "craving_journal",
+    "iron_shield_settings",
 )
 
 @Composable
@@ -219,6 +248,7 @@ fun ShieldApp(
     initialDestination: String? = null,
     onEnableProtection: () -> Unit,
     onDisableProtection: () -> Unit,
+    onOpenIronShieldSettings: (navigate: () -> Unit) -> Unit = { it() },
 ) {
     val navController = rememberNavController()
     val onboardingViewModel: OnboardingViewModel = hiltViewModel()
@@ -287,6 +317,7 @@ fun ShieldApp(
                 onOpenDiagnostics = { navController.navigate("diagnostics") },
                 onOpenSettings = { navController.navigate("settings") },
                 onOpenSupport = { navController.navigate("support") },
+                onOpenRecovery = { navController.navigate("recovery") },
             )
         }
         composable(
@@ -319,6 +350,7 @@ fun ShieldApp(
                 onOpenAccountability = { navController.navigate("accountability") },
                 onOpenParent = { navController.navigate("parent") },
                 onOpenPrivacyPolicy = { navController.navigate("privacy") },
+                onOpenIronShield = { onOpenIronShieldSettings { navController.navigate("iron_shield_settings") } },
             )
         }
         composable(
@@ -360,6 +392,55 @@ fun ShieldApp(
             popExitTransition = shieldPopExit,
         ) {
             dev.gamblock.feature.support.SupportRoute(onBack = { navController.popBackStack() })
+        }
+        composable(
+            route = "recovery",
+            enterTransition = shieldEnter,
+            exitTransition = shieldExit,
+            popEnterTransition = shieldPopEnter,
+            popExitTransition = shieldPopExit,
+        ) {
+            dev.gamblock.feature.dashboard.RecoveryDashboardRoute(
+                onBack = { navController.popBackStack() },
+                onOpenUrgeSurfer = { navController.navigate("urge_surfer") },
+                onOpenJournal = { navController.navigate("craving_journal") },
+                onOpenSupport = { navController.navigate("support") },
+                onOpenIronShieldSettings = { onOpenIronShieldSettings { navController.navigate("iron_shield_settings") } },
+            )
+        }
+        composable(
+            route = "urge_surfer",
+            enterTransition = shieldEnter,
+            exitTransition = shieldExit,
+            popEnterTransition = shieldPopEnter,
+            popExitTransition = shieldPopExit,
+        ) {
+            dev.gamblock.feature.dashboard.UrgeSurferRoute(
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(
+            route = "craving_journal",
+            enterTransition = shieldEnter,
+            exitTransition = shieldExit,
+            popEnterTransition = shieldPopEnter,
+            popExitTransition = shieldPopExit,
+        ) {
+            dev.gamblock.feature.dashboard.CravingJournalRoute(
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(
+            route = "iron_shield_settings",
+            enterTransition = shieldEnter,
+            exitTransition = shieldExit,
+            popEnterTransition = shieldPopEnter,
+            popExitTransition = shieldPopExit,
+        ) {
+            dev.gamblock.feature.settings.IronShieldSettingsRoute(
+                onBack = { navController.popBackStack() },
+                onOpenSupport = { navController.navigate("support") },
+            )
         }
     }
 }
