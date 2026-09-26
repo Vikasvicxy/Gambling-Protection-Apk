@@ -28,11 +28,15 @@ private const val COUNTDOWN_FRAME_MS = 250L
 /**
  * The single destructive-action dialog. It renders whatever gate the shared
  * [ProtectionGateHolder] reports, so every entry point shows the same rules.
+ *
+ * [nowProvider] exists so the countdown can be driven deterministically in
+ * tests instead of depending on wall-clock time.
  */
 @Composable
 fun ProtectionGateDialog(
     state: ProtectionGateUiState,
     holder: ProtectionGateHolder,
+    nowProvider: () -> Long = System::currentTimeMillis,
 ) {
     if (!state.isVisible) return
 
@@ -107,13 +111,13 @@ fun ProtectionGateDialog(
             // The holder only publishes the deadline, so the dialog does the
             // animating. The loop is bounded by that deadline and always ends.
             val deadline = state.urgeUnlockAtEpochMs
-            var nowMs by remember(deadline) { mutableLongStateOf(System.currentTimeMillis()) }
+            var nowMs by remember(deadline) { mutableLongStateOf(nowProvider()) }
             LaunchedEffect(deadline) {
-                while (System.currentTimeMillis() < deadline) {
+                while (nowProvider() < deadline) {
                     delay(COUNTDOWN_FRAME_MS)
-                    nowMs = System.currentTimeMillis()
+                    nowMs = nowProvider()
                 }
-                nowMs = System.currentTimeMillis()
+                nowMs = nowProvider()
             }
             val totalSeconds = state.remainingMs(nowMs) / 1000L
             val done = state.remainingMs(nowMs) <= 0L
@@ -160,7 +164,7 @@ fun ProtectionGateDialog(
                         enabled = done && pledgeMatches,
                     ) { Text("Continue") }
                 },
-                dismissButton = { TextButton(onClick = holder::dismiss) { Text("Keep protection on") } },
+                dismissButton = { TextButton(onClick = holder::dismiss) { Text("Cancel & Stay Protected") } },
             )
         }
 

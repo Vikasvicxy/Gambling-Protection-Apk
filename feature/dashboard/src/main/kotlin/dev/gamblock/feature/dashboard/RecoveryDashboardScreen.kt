@@ -40,6 +40,7 @@ import dev.gamblock.core.designsystem.component.ShieldText
 import dev.gamblock.core.designsystem.theme.ShieldPalette
 import dev.gamblock.core.model.RecoveryCalculator
 import dev.gamblock.core.model.RecoveryCurrency
+import dev.gamblock.core.model.RecoveryMetrics
 import dev.gamblock.core.model.UrgeTimerState
 import dev.gamblock.data.preferences.CravingInsightsSnapshot
 import java.util.Calendar
@@ -68,37 +69,10 @@ fun RecoveryDashboardRoute(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                ShieldCard(title = "Clean streak") {
-                    ShieldText(
-                        text = if (metrics.daysClean > 0) "Protected for ${metrics.daysClean} day(s)" else "No streak yet",
-                        style = MaterialTheme.typography.headlineSmall,
-                    )
-                    ShieldText(
-                        text = "Estimated money saved: " +
-                            RecoveryCalculator.formatMoney(metrics.moneySavedMinor, metrics.currency),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ShieldPalette.Green,
-                    )
-                    metrics.reachedMilestones.forEach { milestone ->
-                        ShieldText(
-                            text = "Reached: ${milestone.title}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    metrics.nextMilestone?.let { milestone ->
-                        ShieldText(
-                            text = "Next: ${milestone.title} in ${metrics.daysUntilNextMilestone} day(s)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    ShieldButton(
-                        text = if (metrics.hasStartDate) "Restart streak today" else "Start streak today",
-                        onClick = viewModel::startRecoveryNow,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                RecoveryMetricsSection(
+                    metrics = metrics,
+                    onStartOrRestartStreak = viewModel::startRecoveryNow,
+                )
             }
 
             item {
@@ -199,6 +173,50 @@ fun RecoveryDashboardRoute(
             domain = promptDomain,
             onLog = { viewModel.promptJournal(promptDomain); onOpenJournal() },
             onDismiss = viewModel::dismissJournalPrompt,
+        )
+    }
+}
+
+/**
+ * The clean-streak and money-saved card, split out of [RecoveryDashboardRoute]
+ * so the numbers it shows can be rendered and asserted without Hilt, a
+ * database, or a live ViewModel.
+ */
+@Composable
+fun RecoveryMetricsSection(
+    metrics: RecoveryMetrics,
+    onStartOrRestartStreak: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ShieldCard(title = "Clean streak", modifier = modifier) {
+        ShieldText(
+            text = if (metrics.daysClean > 0) "Protected for ${metrics.daysClean} day(s)" else "No streak yet",
+            style = MaterialTheme.typography.headlineSmall,
+        )
+        ShieldText(
+            text = "Estimated money saved: " +
+                RecoveryCalculator.formatMoney(metrics.moneySavedMinor, metrics.currency),
+            style = MaterialTheme.typography.bodyMedium,
+            color = ShieldPalette.Green,
+        )
+        metrics.reachedMilestones.forEach { milestone ->
+            ShieldText(
+                text = "Reached: ${milestone.title}",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        metrics.nextMilestone?.let { milestone ->
+            ShieldText(
+                text = "Next: ${milestone.title} in ${metrics.daysUntilNextMilestone} day(s)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        ShieldButton(
+            text = if (metrics.hasStartDate) "Restart streak today" else "Start streak today",
+            onClick = onStartOrRestartStreak,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }

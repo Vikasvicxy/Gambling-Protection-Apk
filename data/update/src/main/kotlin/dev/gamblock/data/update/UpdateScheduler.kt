@@ -15,7 +15,7 @@ import javax.inject.Singleton
 
 /**
  * Schedules the daily signed update sync. Periodic work is idempotent (UPDATE
- * policy), network-gated and exponentially backed off. Enqueue at app start.
+ * policy), network-gated and idle-gated. Enqueue at app start.
  */
 @Singleton
 class UpdateScheduler @Inject constructor(
@@ -23,9 +23,11 @@ class UpdateScheduler @Inject constructor(
 ) {
 
     fun schedulePeriodic() {
+        // No explicit backoff here: WorkManager rejects setBackoffCriteria on a
+        // device-idle ("idle mode") request, and periodic work already retries
+        // exponentially by default. Setting it crashed the app on launch.
         val request = PeriodicWorkRequestBuilder<BlocklistSyncWorker>(24, TimeUnit.HOURS, 8, TimeUnit.HOURS)
             .setConstraints(periodicConstraints())
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
             .build()
         val workManager = WorkManager.getInstance(context)
         workManager.cancelUniqueWork(LEGACY_UPDATE_WORK_NAME)
