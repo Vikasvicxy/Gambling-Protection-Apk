@@ -71,6 +71,25 @@ fun SupportRoute(
 
             Spacer(Modifier.height(16.dp))
 
+            ShieldCard(title = "If you are in crisis") {
+                ShieldText(
+                    "If you might act on thoughts of harming yourself or someone else, " +
+                        "call your local emergency number now: " +
+                        dev.gamblock.core.model.CrisisDirectory.EMERGENCY_GUIDANCE + ".",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                ShieldText(
+                    "The helplines below are stored on your device and work without internet. Availability varies; if one number does not connect, try the next.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            CrisisDirectorySection(context = context)
+
+            Spacer(Modifier.height(16.dp))
+
             ShieldButton(
                 text = "Email support",
                 onClick = {

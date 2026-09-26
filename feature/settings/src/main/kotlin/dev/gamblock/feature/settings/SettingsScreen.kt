@@ -43,6 +43,7 @@ fun SettingsRoute(
     onOpenAccountability: () -> Unit = {},
     onOpenParent: () -> Unit = {},
     onOpenPrivacyPolicy: () -> Unit = {},
+    onOpenIronShield: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -158,6 +159,22 @@ fun SettingsRoute(
                             onRemove = { viewModel.removeException(exception.id) },
                         )
                     }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            ShieldCard(title = "Iron Shield") {
+                ShieldText(
+                    "Recovery, financial progress, cooling-off timer, Fortress windows, Guardian PIN, " +
+                        "encrypted-bypass blocking and Private DNS alerts. Each one is an independent switch.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                androidx.compose.material3.Button(
+                    onClick = onOpenIronShield,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Open Iron Shield settings")
                 }
             }
 

@@ -41,6 +41,12 @@ data class SettingsState(
     val notificationsEnabled: Boolean = true,
     val requireAuthBeforeDisable: Boolean = false,
     val requireAuthBeforeClearHistory: Boolean = false,
+    val urgeTimerEnabled: Boolean = false,
+    val fortressModeEnabled: Boolean = false,
+    val guardianPinEnabled: Boolean = false,
+    val blockEncryptedBrowsers: Boolean = true,
+    val privateDnsAlertEnabled: Boolean = true,
+    val urgeSurferHaptics: Boolean = true,
 )
 
 @Singleton
@@ -111,6 +117,18 @@ class SettingsRepository @Inject constructor(
     suspend fun setRequireAuthBeforeDisable(enabled: Boolean) = update { it.copy(requireAuthBeforeDisable = enabled) }
 
     suspend fun setRequireAuthBeforeClearHistory(enabled: Boolean) = update { it.copy(requireAuthBeforeClearHistory = enabled) }
+
+    suspend fun setUrgeTimerEnabled(enabled: Boolean) = update { it.copy(urgeTimerEnabled = enabled) }
+
+    suspend fun setFortressModeEnabled(enabled: Boolean) = update { it.copy(fortressModeEnabled = enabled) }
+
+    suspend fun setGuardianPinEnabled(enabled: Boolean) = update { it.copy(guardianPinEnabled = enabled) }
+
+    suspend fun setBlockEncryptedBrowsers(enabled: Boolean) = update { it.copy(blockEncryptedBrowsers = enabled) }
+
+    suspend fun setPrivateDnsAlertEnabled(enabled: Boolean) = update { it.copy(privateDnsAlertEnabled = enabled) }
+
+    suspend fun setUrgeSurferHaptics(enabled: Boolean) = update { it.copy(urgeSurferHaptics = enabled) }
 
     companion object {
         private val SETTINGS_JSON = stringPreferencesKey("settings_json")
