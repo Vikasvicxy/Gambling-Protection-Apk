@@ -1,6 +1,23 @@
 # Shield — Privacy Policy Draft (Phase 4 §17)
 
-> Status: DRAFT, ready for maintainer review + legal sign-off. Host at a stable public URL before Play production listing.
+> **SUPERSEDED — DO NOT PUBLISH.**
+> The live, reviewed policy is `docs/privacy-policy.md`, rendered at
+> <https://vikasvicxy.github.io/Gambling-Protection-Apk/>. That is the version
+> submitted to Google Play.
+>
+> This draft is kept for history only, and it contains two claims that are now
+> known to be wrong:
+>
+> 1. "Crash/log data: default OS crash reporting." Shield ships no crash
+>    reporter at all, and crashes are not transmitted.
+> 2. Device/pairing data is described as if collection were normal behaviour.
+>    It is opt-in and off by default.
+>
+> It also omits the blocklist update fetch, which does contact
+> `gamblock.github.io` over HTTPS. A policy that does not mention it is
+> incomplete.
+
+> Status: SUPERSEDED by `docs/privacy-policy.md`.
 
 **Effective date:** 2026-09-17 (update on release).
 
