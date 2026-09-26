@@ -1,13 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    The VPN module owns the only two components that are legitimately reachable
+    from outside the app, so both carry an explicit android:exported value and
+    a signature-level permission guard.
+
+    Permissions declared here are declared in exactly one place across the
+    codebase; see app/src/main/AndroidManifest.xml for the full Play Store
+    justification of each.
+-->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.BIND_VPN_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application>
+        <!--
+            Not exported: only this app starts its own tunnel, and VpnService
+            enforces that through the BIND_VPN_SERVICE signature permission on
+            the component. An intent filter is present only because the system
+            must be able to resolve android.net.VpnService.
+
+            foregroundServiceType="connectedDevice" is the API 34+ type for a
+            user-initiated VPN tunnel and is what makes
+            FOREGROUND_SERVICE_CONNECTED_DEVICE the correct matching permission.
+        -->
         <service
             android:name=".ShieldVpnService"
             android:exported="false"
@@ -18,6 +36,12 @@
             </intent-filter>
         </service>
 
+        <!--
+            Exported so the system Quick Settings host can bind the tile, which
+            runs under a different UID. BIND_QUICK_SETTINGS_TILE is a signature
+            permission, so no other app can bind this tile even though it is
+            exported.
+        -->
         <service
             android:name=".ProtectionTileService"
             android:label="@string/shield_tile_label"

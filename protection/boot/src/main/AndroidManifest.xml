@@ -1,9 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Boot receivers exist so a restart cannot silently leave protection off.
+    Both receivers declare android:exported explicitly.
+-->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application>
+        <!--
+            Exported because the system delivers the boot broadcasts, which
+            requires crossing a UID boundary. Every action it accepts is a
+            protected system broadcast, and the receiver additionally requires
+            android.permission.RECEIVE_BOOT_COMPLETED, so no third-party app
+            can trigger it.
+
+            MY_PACKAGE_REPLACED is included so protection is re-armed after the
+            app is updated. The high priority lets Shield restore the tunnel
+            before other apps start their background work.
+        -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
@@ -16,6 +31,11 @@
             </intent-filter>
         </receiver>
 
+        <!--
+            Not exported: ProtectionRecoveryReceiver is started internally by
+            Shield itself and has no intent-filter, so it must not be reachable
+            from another app.
+        -->
         <receiver
             android:name=".ProtectionRecoveryReceiver"
             android:exported="false" />

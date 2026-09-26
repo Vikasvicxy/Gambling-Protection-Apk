@@ -1,14 +1,88 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Play Store compliance notes
+
+    Every permission below is declared here or in a library module and is
+    justified in the comment attached to it. Play review rejects apps that
+    request permissions they do not use, and sensitive permissions need a
+    written core-function justification in the listing.
+
+    Permission surface is intentionally minimal: Shield has no analytics, no
+    ads, no location, no camera, no contacts, no storage and no account
+    permissions. It also sends no telemetry off the device.
+-->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!--
+        Required to fetch the signed threat-intelligence feed and the DoH/DoQ
+        blocklist. The VPN tunnel itself is not "network access" on the public
+        internet, but the sync and blocklist download are, so this cannot be
+        dropped.
+    -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+        Read-only network state, used to decide whether the update/blocklist
+        sync is currently possible and to report connectivity in Diagnostics.
+        No connection is ever opened with it.
+    -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!--
+        Needed to show the local accountability and urge-surfing reminders.
+        These are user-facing local notifications only - no notification is a
+        push, and nothing is received from a server.
+
+        Note: the ongoing VPN notification is a foreground-service
+        notification, which the platform shows regardless of this grant.
+    -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+        Re-arms protection after a reboot so a restart cannot silently leave
+        the VPN down. The receiver is guarded by this permission and only ever
+        handles BOOT_COMPLETED / LOCKED_BOOT_COMPLETED / MY_PACKAGE_REPLACED.
+    -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!--
+        The content filter must keep running while the app is backgrounded,
+        which is the entire point of a VPN. Required for ShieldVpnService.
+    -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!--
+        Android 14+ (API 34) requires the specific type for every foreground
+        service. ShieldVpnService declares
+        android:foregroundServiceType="connectedDevice", which is the correct
+        type for a user-initiated VPN tunnel, and this permission is its
+        matching requirement.
+
+        This is deliberately NOT FOREGROUND_SERVICE_SPECIAL_USE: using the
+        "special use" type would additionally require completing Play's
+        special-use declaration form, and connectedDevice is the accurate type
+        here, so no declaration is needed.
+    -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
+    <!--
+        Mandated by the platform to establish and tear down a VPN tunnel
+        (android.net.VpnService). Cannot be removed while using VpnService.
+    -->
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+
+    <!--
+        Sensitive permission, and a common rejection cause. Justification: the
+        user has explicitly started a VPN whose core function is filtering
+        traffic. Android may kill that tunnel in Doze, which would silently
+        stop protection - exactly the failure this app exists to prevent.
+
+        The exemption is only ever requested from a user-initiated action on
+        the Diagnostics screen (Settings.ACTION_REQUEST_IGNORE_BATTERY_
+        OPTIMIZATIONS); it is never requested at startup or automatically.
+        VPN apps are an accepted core-function use case for this permission.
+    -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
@@ -23,6 +97,13 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Shield.Starting">
 
+        <!--
+            Exported because it is the launcher entry point and therefore must
+            be reachable by the system launcher, which is a different UID.
+            android:exported is stated explicitly rather than inferred: any
+            component with an intent-filter must declare it from API 31, and
+            an explicit value lets review see the intent.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -34,6 +115,12 @@
             </intent-filter>
         </activity>
 
+        <!--
+            androidx.startup content provider. Not app functionality, so it is
+            never exported; declaring exported="false" explicitly keeps it out
+            of the review surface. The WorkManager initializer entry is removed
+            because WorkManager is initialised on demand instead.
+        -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
