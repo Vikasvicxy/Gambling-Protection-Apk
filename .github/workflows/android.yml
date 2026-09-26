@@ -1,0 +1,271 @@
+name: Android CI
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+
+# Least privilege by default. Only the release job needs to write, and it asks
+# for it explicitly, so a compromised lint step cannot push a tag or a release.
+permissions:
+  contents: read
+
+# A new push to the same branch makes the previous run irrelevant. Tag builds are
+# never cancelled: half-finished work on v1.0.0 must not silently disappear.
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8
+  # Kept in step with app/build.gradle.kts (compileSdk 37, AGP 9.4).
+  ANDROID_PLATFORM: platforms;android-37.0
+  ANDROID_BUILD_TOOLS: build-tools;37.0.0
+
+jobs:
+  # ===========================================================================
+  # Job 1 - the gate. Nothing gets built for release until this is green.
+  # ===========================================================================
+  lint-and-test:
+    name: Lint & Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK platform and build tools
+        run: |
+          sdkmanager "$ANDROID_PLATFORM" "$ANDROID_BUILD_TOOLS"
+
+      - name: Lint
+        run: ./gradlew lintDebug --console=plain
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --console=plain
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: '**/build/reports/lint-results-debug.*'
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ===========================================================================
+  # Job 2 - build every artifact, signed when the keystore secret is available.
+  # ===========================================================================
+  release-assembly:
+    name: Release Assembly
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK platform and build tools
+        run: |
+          sdkmanager "$ANDROID_PLATFORM" "$ANDROID_BUILD_TOOLS"
+
+      # The keystore is never in the repository. app/build.gradle.kts reads a
+      # git-ignored keystore.properties from the repository root, so the
+      # properties file and the .p12 are both reconstructed here and thrown away
+      # with the runner.
+      - name: Reconstruct release signing material
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.SHIELD_RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.SHIELD_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SHIELD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SHIELD_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64}" ] || [ -z "${STORE_PASSWORD}" ] \
+             || [ -z "${KEY_ALIAS}" ] || [ -z "${KEY_PASSWORD}" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Release signing secrets are not configured. Building with the" \
+                 "debug key. These artifacts MUST NOT be published to Google Play."
+            exit 0
+          fi
+
+          mkdir -p release-keys
+          echo "${KEYSTORE_BASE64}" | base64 --decode --output release-keys/shield-release.p12
+          chmod 600 release-keys/shield-release.p12
+
+          # storeFile is resolved against the repository root by the build script.
+          cat > keystore.properties <<EOF
+          storeFile=release-keys/shield-release.p12
+          storePassword=${STORE_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          keyPassword=${KEY_PASSWORD}
+          EOF
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the restored keystore before building
+        if: steps.signing.outputs.available == 'true'
+        env:
+          STORE_PASSWORD: ${{ secrets.SHIELD_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SHIELD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SHIELD_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keytool -list -keystore release-keys/shield-release.p12 \
+            -storepass "${STORE_PASSWORD}" -alias "${KEY_ALIAS}" > /dev/null
+
+      # -PshieldRequireReleaseSigning turns a missing or broken keystore into a
+      # hard failure. Without it the build silently falls back to the debug key
+      # and hands you a "release" that can never be uploaded to Play.
+      - name: Assemble debug, release APK and release bundle
+        if: steps.signing.outputs.available == 'true'
+        run: ./gradlew assembleDebug assembleRelease bundleRelease --console=plain -PshieldRequireReleaseSigning=true
+
+      - name: Assemble debug, release APK and release bundle (unsigned)
+        if: steps.signing.outputs.available != 'true'
+        run: ./gradlew assembleDebug assembleRelease bundleRelease --console=plain
+
+      # Collect the outputs under stable names so the archive and release jobs
+      # never have to know Gradle's internal output layout.
+      - name: Stage artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk          dist/app-debug.apk
+          cp app/build/outputs/apk/release/app-release.apk      dist/app-release.apk
+          cp app/build/outputs/bundle/release/app-release.aab   dist/app-release.aab
+          if [ -f app/build/outputs/mapping/release/mapping.txt ]; then
+            cp app/build/outputs/mapping/release/mapping.txt     dist/mapping.txt
+          fi
+          if [ "${{ steps.signing.outputs.available }}" != "true" ]; then
+            # Never let a debug-signed build be mistaken for a real release.
+            touch dist/UNSIGNED-BUILD.txt
+          fi
+          ls -l dist
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: shield-apk-aab
+          path: dist/
+          retention-days: 14
+          if-no-files-found: error
+
+  # ===========================================================================
+  # Job 3 - re-package the build output as a single downloadable archive.
+  # ===========================================================================
+  archive:
+    name: Artifact Archive
+    needs: release-assembly
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: shield-apk-aab
+          path: dist
+
+      - name: Package archive
+        run: |
+          set -euo pipefail
+          # ref_name is "123/merge" on pull requests, and a slash in a zip entry
+          # name silently creates a directory instead of the file you asked for.
+          SAFE_REF="$(echo '${{ github.ref_name }}' | tr '/' '-')"
+          cd dist
+          zip -r "shield-${SAFE_REF}.zip" . -x '*.zip'
+          cd ..
+          # Checksum the payload, never the checksum file itself.
+          ( cd dist && find . -type f ! -name 'SHA256SUMS.txt' -print0 \
+              | sort -z | xargs -0 sha256sum > SHA256SUMS.txt )
+          cat dist/SHA256SUMS.txt
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: shield-release-bundle
+          path: dist/
+          retention-days: 14
+          if-no-files-found: error
+
+  # ===========================================================================
+  # Job 4 - a tag produces a DRAFT release. Draft, not published, so a human
+  # still has to read the notes and confirm the signing state before it is
+  # announced.
+  # ===========================================================================
+  github-release:
+    name: Draft GitHub Release
+    needs: release-assembly
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: shield-apk-aab
+          path: dist
+
+      # A draft built with the debug key is worse than no release at all, because
+      # it looks official. Fail loudly and let a human fix the secrets.
+      - name: Refuse to draft an unsigned release
+        if: hashFiles('dist/UNSIGNED-BUILD.txt') != ''
+        run: |
+          echo "::error::Refusing to create a release from an unsigned build." \
+               "Configure SHIELD_RELEASE_KEYSTORE_BASE64, SHIELD_KEYSTORE_PASSWORD," \
+               "SHIELD_KEY_ALIAS and SHIELD_KEY_PASSWORD as repository secrets."
+          exit 1
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: ${{ github.ref_name }}
+          name: Shield ${{ github.ref_name }}
+          files: |
+            dist/app-release.apk
+            dist/app-release.aab
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          body: |
+            Draft build for `${{ github.ref_name }}`.
+
+            | Artifact | Notes |
+            | --- | --- |
+            | `app-release.apk` | Sideloadable, production-signed |
+            | `app-release.aab` | Upload this to Google Play Console |
+            | `mapping.txt` | R8 map, in the Actions artifact only, never public |
+
+            Verify the signature before publishing:
+
+            ```
+            apksigner verify --print-certs app-release.apk
+            ```
+
+            This release is a **draft**. It was not published automatically.
