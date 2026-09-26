@@ -15,13 +15,16 @@ out/
 captures/
 
 # --- Secrets & keys (never commit) ---
+# The release upload key must never reach the repository: losing it means the
+# published app can no longer be updated, and committing it leaks that key.
 *.jks
 *.keystore
 *.p12
+*.key
 keystore.properties
 signing.properties
-*.key
 secrets.properties
+/release-keys/
 
 # --- Local-only tooling artifacts (never commit) ---
 local/

@@ -7,17 +7,82 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+import java.io.File
 import java.io.FileInputStream
 import java.util.Properties
 
+// --- Release signing ---------------------------------------------------------
+// Production signing is opt-in. It activates only when a git-ignored
+// keystore.properties is present at the repository root AND every required
+// field is populated AND the keystore it points at actually exists. That is
+// what scripts/generate-keystore.ps1 (or .sh) writes.
+//
+// Keystores and passwords are never committed - see .gitignore.
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties().apply {
     if (keystorePropertiesFile.exists()) {
         FileInputStream(keystorePropertiesFile).use { load(it) }
     }
 }
-val configuredStoreFile = keystoreProperties.getProperty("storeFile")?.takeIf { it.isNotBlank() }
-val hasReleaseSigning = configuredStoreFile?.let { file(it).isFile } == true
+
+val requiredSigningProperties = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+val missingSigningProperties = requiredSigningProperties
+    .filter { keystoreProperties.getProperty(it).isNullOrBlank() }
+
+// storeFile is written relative to the repository root, so resolve it there
+// rather than against this (app/) project directory.
+val configuredStoreFile: File? = keystoreProperties.getProperty("storeFile")
+    ?.takeIf { it.isNotBlank() }
+    ?.let { raw ->
+        val candidate = File(raw)
+        if (candidate.isAbsolute) candidate else rootProject.file(raw)
+    }
+
+val hasReleaseSigning = keystorePropertiesFile.exists() &&
+    missingSigningProperties.isEmpty() &&
+    configuredStoreFile?.isFile == true
+
+// A present-but-broken configuration is a mistake worth failing on: silently
+// downgrading it would hand the developer a debug-signed artifact that looks
+// exactly like a real release.
+if (keystorePropertiesFile.exists() && !hasReleaseSigning) {
+    val problems = buildList {
+        if (missingSigningProperties.isNotEmpty()) {
+            add("keystore.properties is missing: ${missingSigningProperties.joinToString()}")
+        }
+        if (configuredStoreFile?.isFile != true) {
+            add("keystore not found at '${configuredStoreFile?.path ?: "<storeFile>"}'")
+        }
+    }
+    throw GradleException(
+        "keystore.properties exists but is unusable:\n  - ${problems.joinToString("\n  - ")}\n" +
+            "Fix the file, or delete it to fall back to the debug signing key.",
+    )
+}
+
+// Set -PshieldRequireReleaseSigning=true in CI to make a debug-signed release
+// a hard failure instead of a warning.
+val requireReleaseSigning = providers.gradleProperty("shieldRequireReleaseSigning")
+    .map { it.toBoolean() }
+    .getOrElse(false)
+
+val releaseRequested = gradle.startParameter.taskNames
+    .any { it.contains("release", ignoreCase = true) }
+
+if (!hasReleaseSigning) {
+    val message = "Shield release is NOT production-signed: keystore.properties is absent, " +
+        "so the debug key is being used. Run scripts/generate-keystore.ps1 " +
+        "(or .sh) before publishing."
+    // An explicit opt-in must fail the build no matter which task is running.
+    if (requireReleaseSigning) {
+        throw GradleException(message)
+    }
+    // Otherwise only warn, and only when a release task was actually requested,
+    // so ordinary debug builds stay quiet.
+    if (releaseRequested) {
+        logger.warn("WARNING: $message")
+    }
+}
 
 android {
     namespace = "dev.gamblock.shield"
@@ -35,12 +100,11 @@ android {
     }
 
     signingConfigs {
-        // Optional release signing. Activates only when keystore.properties exists
-        // (git-ignored). Keystore files and passwords never live in the repository.
+        // Populated only when keystore.properties is present and valid. The
+        // block is always created so the build can still be configured without
+        // secrets; buildTypes below selects it only when hasReleaseSigning.
         create("release") {
-            keystoreProperties.getProperty("storeFile")?.takeIf { it.isNotBlank() }?.let {
-                storeFile = file(it)
-            }
+            configuredStoreFile?.let { storeFile = it }
             storePassword = keystoreProperties.getProperty("storePassword", "")
             keyAlias = keystoreProperties.getProperty("keyAlias", "")
             keyPassword = keystoreProperties.getProperty("keyPassword", "")
