@@ -34,6 +34,7 @@ dependencies {
     api(project(":core:common"))
     api(project(":core:model"))
     api(project(":core:security"))
+    implementation(project(":core:database"))
 
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.hilt.android)

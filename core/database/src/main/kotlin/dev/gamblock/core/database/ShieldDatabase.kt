@@ -11,6 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import dev.gamblock.core.database.dao.ActivityEventDao
 import dev.gamblock.core.database.dao.BlockAttemptGroupDao
 import dev.gamblock.core.database.dao.CommitmentDao
+import dev.gamblock.core.database.dao.CravingJournalDao
 import dev.gamblock.core.database.dao.CustomDomainExceptionDao
 import dev.gamblock.core.database.dao.DomainDao
 import dev.gamblock.core.database.dao.FalsePositiveReportDao
@@ -18,6 +19,7 @@ import dev.gamblock.core.database.dao.MetaDao
 import dev.gamblock.core.database.entity.ActivityEventEntity
 import dev.gamblock.core.database.entity.BlockAttemptGroupEntity
 import dev.gamblock.core.database.entity.CommitmentEntity
+import dev.gamblock.core.database.entity.CravingJournalEntity
 import dev.gamblock.core.database.entity.CustomDomainExceptionEntity
 import dev.gamblock.core.database.entity.DomainEntity
 import dev.gamblock.core.database.entity.FalsePositiveReportEntity
@@ -62,8 +64,9 @@ class EnumsConverter {
         CommitmentEntity::class,
         MetaEntity::class,
         CustomDomainExceptionEntity::class,
+        CravingJournalEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(EnumsConverter::class)
@@ -76,6 +79,7 @@ abstract class ShieldDatabase : RoomDatabase() {
     abstract fun commitmentDao(): CommitmentDao
     abstract fun metaDao(): MetaDao
     abstract fun customDomainExceptionDao(): CustomDomainExceptionDao
+    abstract fun cravingJournalDao(): CravingJournalDao
 
     companion object {
 
@@ -89,7 +93,7 @@ abstract class ShieldDatabase : RoomDatabase() {
 
         fun build(context: Context, name: String): ShieldDatabase =
             Room.databaseBuilder(context, ShieldDatabase::class.java, name)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .addCallback(object : RoomDatabase.Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
@@ -102,7 +106,7 @@ abstract class ShieldDatabase : RoomDatabase() {
         fun inMemory(context: Context): ShieldDatabase =
             Room.inMemoryDatabaseBuilder(context, ShieldDatabase::class.java)
                 .allowMainThreadQueries()
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -118,6 +122,28 @@ abstract class ShieldDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE UNIQUE INDEX IF NOT EXISTS `index_custom_domain_exceptions_normalizedDomain` " +
                         "ON `custom_domain_exceptions` (`normalizedDomain`)",
+                )
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `craving_journal_entries` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`occurredAtEpochMs` INTEGER NOT NULL, " +
+                        "`intensity` INTEGER NOT NULL, " +
+                        "`triggers` TEXT NOT NULL, " +
+                        "`note` TEXT NOT NULL, " +
+                        "`blockedDomain` TEXT)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_craving_journal_entries_occurredAtEpochMs` " +
+                        "ON `craving_journal_entries` (`occurredAtEpochMs`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_craving_journal_entries_intensity` " +
+                        "ON `craving_journal_entries` (`intensity`)",
                 )
             }
         }

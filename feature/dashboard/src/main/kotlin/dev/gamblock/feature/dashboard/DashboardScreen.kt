@@ -88,6 +88,7 @@ fun DashboardRoute(
     onOpenDiagnostics: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSupport: () -> Unit,
+    onOpenRecovery: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -252,6 +253,12 @@ fun DashboardRoute(
                 }
                 Spacer(Modifier.height(8.dp))
                 ShieldButton(text = "Support & guidance", onClick = onOpenSupport, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                ShieldButton(
+                    text = "Recovery & Iron Shield",
+                    onClick = onOpenRecovery,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         },
     )
