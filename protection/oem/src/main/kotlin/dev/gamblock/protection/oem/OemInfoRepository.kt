@@ -132,14 +132,15 @@ class OemInfoRepository @Inject constructor(
         }
 
     /**
-     * True when the active network's VPN transport belongs to Shield. On API 29+ the
+     * True when the active network's VPN transport belongs to Shield. On API 30+ the
      * platform exposes the creating UID on [NetworkCapabilities], which is exact;
      * below that we trust the process-local VPN service state.
      */
     private fun activeVpnIsShield(capabilities: NetworkCapabilities?): Boolean {
         if (capabilities == null) return false
         if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+            // getOwnerUid landed in API 30, not 29; calling it on 29 throws.
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
         ) {
             return try {
                 capabilities.getOwnerUid() == context.applicationInfo.uid

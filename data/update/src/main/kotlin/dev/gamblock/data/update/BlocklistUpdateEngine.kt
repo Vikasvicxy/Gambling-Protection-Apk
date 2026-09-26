@@ -1,6 +1,7 @@
 package dev.gamblock.data.update
 
 import android.content.Context
+import android.os.Build
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.gamblock.core.common.dispatcher.DispatchersProvider
 import dev.gamblock.core.common.logging.Logs
@@ -194,7 +195,15 @@ class BlocklistUpdateEngine @Inject constructor(
     }
 
     private fun appVersionCode(): Int = try {
-        context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode.toInt()
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.longVersionCode.toInt()
+        } else {
+            // getLongVersionCode does not exist before API 28 and would throw
+            // NoSuchMethodError; @Suppress is scoped to the verified branch.
+            @Suppress("DEPRECATION")
+            info.versionCode
+        }
     } catch (e: Exception) {
         0
     }

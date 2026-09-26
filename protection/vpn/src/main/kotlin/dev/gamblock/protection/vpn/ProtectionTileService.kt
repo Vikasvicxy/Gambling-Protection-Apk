@@ -1,6 +1,8 @@
 package dev.gamblock.protection.vpn
 
+import android.annotation.SuppressLint
 import android.graphics.drawable.Icon
+import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import dagger.hilt.android.AndroidEntryPoint
@@ -94,7 +96,7 @@ class ProtectionTileService : TileService() {
                 val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
                 if (launchIntent != null) {
                     launchIntent.putExtra("dev.gamblock.shield.extra.NAV_DESTINATION", "setup")
-                    startActivityAndCollapse(launchIntent)
+                    collapseShadeAndOpen(launchIntent)
                 }
             }
         }
@@ -108,7 +110,29 @@ class ProtectionTileService : TileService() {
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName) ?: return
         launchIntent.putExtra("dev.gamblock.shield.extra.NAV_DESTINATION", destination)
         launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-        startActivityAndCollapse(launchIntent)
+        collapseShadeAndOpen(launchIntent)
+    }
+
+    /**
+     * Collapses the shade and opens [intent]. The PendingIntent overload replaced
+     * the Intent one in API 34, but this module still supports 26, so older levels
+     * keep using the deprecated call.
+     */
+    @SuppressLint("StartActivityAndCollapseDeprecated")
+    private fun collapseShadeAndOpen(intent: android.content.Intent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val pending = android.app.PendingIntent.getActivity(
+                this,
+                0,
+                intent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                    android.app.PendingIntent.FLAG_IMMUTABLE,
+            )
+            startActivityAndCollapse(pending)
+        } else {
+            @Suppress("DEPRECATION")
+            startActivityAndCollapse(intent)
+        }
     }
 
     override fun onDestroy() {
@@ -144,7 +168,10 @@ class ProtectionTileService : TileService() {
         val tile = qsTile ?: return
         tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_shield)
         tile.label = state.label
-        tile.subtitle = state.subtitle
+        // Tile.setSubtitle only exists from API 29; this module supports 26.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            tile.subtitle = state.subtitle
+        }
         tile.state = when (state.ui) {
             ProtectionTileUi.ACTIVE -> Tile.STATE_ACTIVE
             ProtectionTileUi.CONNECTING, ProtectionTileUi.INACTIVE -> Tile.STATE_INACTIVE

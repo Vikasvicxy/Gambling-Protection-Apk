@@ -1,7 +1,10 @@
 package dev.gamblock.shield
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.VpnService
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -29,8 +32,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -254,6 +259,28 @@ fun ShieldApp(
     val onboardingViewModel: OnboardingViewModel = hiltViewModel()
     val onboardingComplete by onboardingViewModel.alreadyCompleted.collectAsStateWithLifecycle()
     val startDestination = if (onboardingComplete) "dashboard" else "onboarding"
+
+    // POST_NOTIFICATIONS became a runtime grant in Android 13, so without this the
+    // accountability and urge-surfacing reminders are silently dropped. Asked once,
+    // in context, as soon as the user has finished setting protection up.
+    val context = LocalContext.current
+    var notificationPermissionRequested by rememberSaveable { mutableStateOf(false) }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { /* Declining is fine: protection works, only the reminders are off. */ }
+
+    LaunchedEffect(onboardingComplete) {
+        if (!onboardingComplete || notificationPermissionRequested) return@LaunchedEffect
+        notificationPermissionRequested = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     LaunchedEffect(initialDestination, startDestination) {
         if (initialDestination != null &&
