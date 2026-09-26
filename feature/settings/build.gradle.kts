@@ -39,6 +39,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:design-system"))
     implementation(project(":data:blocklist"))
+    implementation(project(":data:backup"))
     implementation(project(":data:preferences"))
     implementation(project(":data:repository"))
     implementation(project(":protection:health"))

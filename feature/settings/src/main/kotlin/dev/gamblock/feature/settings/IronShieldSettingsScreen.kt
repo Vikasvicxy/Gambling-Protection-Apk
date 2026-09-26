@@ -1,6 +1,8 @@
 package dev.gamblock.feature.settings
 
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -41,6 +43,18 @@ fun IronShieldSettingsRoute(
     var defenseOpen by remember { mutableStateOf(false) }
     var wellnessOpen by remember { mutableStateOf(false) }
     var crisisOpen by remember { mutableStateOf(false) }
+    var askingExportPassphrase by remember { mutableStateOf(false) }
+    var askingRestorePassphrase by remember { mutableStateOf(false) }
+
+    // The Storage Access Framework owns the destination. Shield never picks a path
+    // and never keeps a handle to a file it did not write on request, so revoking
+    // access in system settings is enough to cut it off.
+    val exportPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(BACKUP_FILE_MIME_TYPE),
+    ) { uri -> if (uri != null) viewModel.exportTo(uri) }
+    val restorePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> if (uri != null) { viewModel.stageRestoreUri(uri); askingRestorePassphrase = true } }
 
     ShieldScaffold(title = "Iron Shield settings", content = { padding ->
         Column(
@@ -227,6 +241,12 @@ fun IronShieldSettingsRoute(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                Spacer(Modifier.height(16.dp))
+                BackupRestoreEditor(
+                    busy = state.backupBusy,
+                    onExportRequested = { askingExportPassphrase = true },
+                    onRestoreFileChosen = { restorePicker.launch(BACKUP_MIME_TYPES) },
+                )
             }
 
             SettingsCategoryCard(
@@ -247,4 +267,56 @@ fun IronShieldSettingsRoute(
             }
         }
     })
+
+    if (askingExportPassphrase) {
+        BackupPassphraseDialog(
+            title = "Choose a backup passphrase",
+            explainer = "This passphrase is the only way to open the file later. Shield cannot " +
+                "recover it for you, so pick something you will remember, and do not reuse " +
+                "your Guardian PIN.",
+            confirmable = true,
+            onConfirm = { passphrase ->
+                askingExportPassphrase = false
+                viewModel.stageExportPassphrase(passphrase)
+                exportPicker.launch(BACKUP_FILE_NAME)
+            },
+            onDismiss = { askingExportPassphrase = false },
+        )
+    }
+
+    if (askingRestorePassphrase) {
+        BackupPassphraseDialog(
+            title = "Open your backup",
+            explainer = "Enter the passphrase you used when you made this backup.",
+            confirmable = false,
+            onConfirm = { passphrase ->
+                askingRestorePassphrase = false
+                viewModel.openRestore(passphrase)
+            },
+            onDismiss = {
+                askingRestorePassphrase = false
+                viewModel.dismissRestorePreview()
+            },
+        )
+    }
+
+    state.pendingRestore?.let { preview ->
+        RestoreConfirmationDialog(
+            preview = preview,
+            onConfirm = viewModel::confirmRestore,
+            onDismiss = viewModel::dismissRestorePreview,
+        )
+    }
 }
+
+/** Encrypted backups are opaque bytes, so the generic type is the honest one. */
+private const val BACKUP_FILE_MIME_TYPE = "application/octet-stream"
+
+private const val BACKUP_FILE_NAME = "shield-recovery-backup.shld"
+
+/**
+ * Offered on restore. The file itself carries the `SHLDBAK1` magic and a format
+ * version, so the filter is a convenience for the user rather than a check: a file
+ * that slips through is still rejected as a bad format.
+ */
+private val BACKUP_MIME_TYPES = arrayOf(BACKUP_FILE_MIME_TYPE, "*/*")

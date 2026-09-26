@@ -32,12 +32,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.gamblock.core.designsystem.component.ShieldButton
 import dev.gamblock.core.designsystem.component.ShieldText
 import dev.gamblock.core.designsystem.theme.ShieldPalette
 import dev.gamblock.core.model.FinancialProfile
 import dev.gamblock.core.model.FortressWindow
+import dev.gamblock.core.model.RecoveryCalculator
 import dev.gamblock.core.model.RecoveryCurrency
 import dev.gamblock.core.model.WeekDay
 
@@ -333,3 +335,188 @@ fun GuardianPinEditor(
         )
     }
 }
+
+/**
+ * Encrypted, offline backup of the user's recovery data.
+ *
+ * The copy here is deliberately plain about what the file is and is not: people
+ * are about to hand their private journal to a file on a memory card, and vague
+ * reassurance is worse than none.
+ */
+@Composable
+fun BackupRestoreEditor(
+    busy: Boolean,
+    onExportRequested: () -> Unit,
+    onRestoreFileChosen: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        ShieldText(
+            text = "Backup & Restore",
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Spacer(Modifier.height(4.dp))
+        ShieldText(
+            text = "Creates an encrypted file with your clean streak, journal entries and custom " +
+                "settings. Only you have the key.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(6.dp))
+        ShieldText(
+            text = "The file is scrambled with your passphrase before it ever touches storage, so " +
+                "nobody can read it without it, and Shield has no copy of it anywhere. " +
+                "There is no account and no cloud sync: the file only goes where you send it. " +
+                "Your Guardian PIN is never written into a backup, so keep the passphrase safe " +
+                "yourself. If you lose it, the file cannot be opened by anyone, including us.",
+            style = MaterialTheme.typography.bodySmall,
+            color = ShieldPalette.Blue,
+        )
+        Spacer(Modifier.height(10.dp))
+        ShieldButton(
+            text = "Backup Recovery Data",
+            onClick = onExportRequested,
+            enabled = !busy,
+            loading = busy,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        ShieldButton(
+            text = "Restore Recovery Data",
+            onClick = onRestoreFileChosen,
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/**
+ * Asks for the backup passphrase. Used for both directions: for an export the
+ * user confirms it, for a restore they only repeat it.
+ *
+ * [confirmable] shows the second field. The value is handed to the caller as a
+ * CharArray so it can be zeroed as soon as the write finishes.
+ */
+@Composable
+fun BackupPassphraseDialog(
+    title: String,
+    explainer: String,
+    confirmable: Boolean,
+    onConfirm: (CharArray) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var passphrase by remember { mutableStateOf("") }
+    var confirmation by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                ShieldText(text = explainer, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = passphrase,
+                    onValueChange = { passphrase = it.take(MAX_PASSPHRASE) },
+                    label = { Text("Passphrase") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                )
+                if (confirmable) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = confirmation,
+                        onValueChange = { confirmation = it.take(MAX_PASSPHRASE) },
+                        label = { Text("Confirm passphrase") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                    )
+                }
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, color = ShieldPalette.Red, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    when {
+                        passphrase.length < MIN_PASSPHRASE ->
+                            error = "Use at least $MIN_PASSPHRASE characters. " +
+                                "A short or all-numbers key can be guessed."
+                        confirmable && passphrase != confirmation ->
+                            error = "The two passphrases do not match"
+                        else -> {
+                            onConfirm(passphrase.toCharArray())
+                            passphrase = ""
+                            confirmation = ""
+                            error = null
+                        }
+                    }
+                },
+            ) { Text(if (confirmable) "Save" else "Open backup") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/**
+ * Shown after a backup has been opened and validated but before anything is
+ * replaced, so the user can see exactly what they are about to get back.
+ */
+@Composable
+fun RestoreConfirmationDialog(
+    preview: BackupRestorePreview,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Replace your recovery data?") },
+        text = {
+            Column {
+                ShieldText(
+                    text = "This backup contains:",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(6.dp))
+                previewLine("Clean streak", "${preview.daysClean} days")
+                previewLine("Journal entries", "${preview.journalEntries}")
+                previewLine("Custom exceptions", "${preview.customExceptions}")
+                previewLine("Fortress windows", "${preview.fortressWindows}")
+                previewLine(
+                    "Weekly amount",
+                    RecoveryCalculator.formatMoney(preview.weeklySpendMinor, preview.currency),
+                )
+                if (preview.milestonesReached > 0) {
+                    previewLine("Milestones reached", "${preview.milestonesReached}")
+                }
+                Spacer(Modifier.height(10.dp))
+                ShieldText(
+                    text = "Restoring replaces the recovery data on this phone. Your Guardian PIN " +
+                        "is not in the file, so you will need to set a new one here.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ShieldPalette.Orange,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Restore") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun previewLine(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodySmall)
+        Text(value, style = MaterialTheme.typography.bodySmall, color = ShieldPalette.Green)
+    }
+}
+
+private const val MIN_PASSPHRASE = 8
+private const val MAX_PASSPHRASE = 128

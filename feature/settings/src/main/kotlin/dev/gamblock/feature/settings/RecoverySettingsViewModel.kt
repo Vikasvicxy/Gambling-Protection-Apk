@@ -1,5 +1,6 @@
 package dev.gamblock.feature.settings
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -9,6 +10,8 @@ import dev.gamblock.core.model.FortressStatus
 import dev.gamblock.core.model.FortressWindow
 import dev.gamblock.core.model.RecoveryCurrency
 import dev.gamblock.core.model.RecoveryMetrics
+import dev.gamblock.data.backup.PreparedRestore
+import dev.gamblock.data.backup.RecoveryBackupRepository
 import dev.gamblock.data.preferences.CravingInsightsSnapshot
 import dev.gamblock.data.preferences.GuardianPinRepository
 import dev.gamblock.data.preferences.GuardianPinUnlockState
@@ -51,6 +54,26 @@ data class RecoverySettingsUiState(
     val statusMessage: String? = null,
     val reportFile: File? = null,
     val reportBusy: Boolean = false,
+    val backupBusy: Boolean = false,
+    /**
+     * A backup that has been opened and validated but not yet applied. Non-null
+     * means the confirmation sheet is showing what the user is about to replace
+     * their current data with.
+     */
+    val pendingRestore: BackupRestorePreview? = null,
+)
+
+/** What a backup file holds, shown before the user commits to restoring it. */
+data class BackupRestorePreview(
+    val daysClean: Int = 0,
+    val journalEntries: Int = 0,
+    val customExceptions: Int = 0,
+    val fortressWindows: Int = 0,
+    val milestonesReached: Int = 0,
+    val weeklySpendMinor: Long = 0L,
+    val currency: RecoveryCurrency = RecoveryCurrency.default,
+    val exportedAtEpochMs: Long = 0L,
+    val appVersionName: String = "",
 )
 
 @HiltViewModel
@@ -63,13 +86,34 @@ class RecoverySettingsViewModel @Inject constructor(
     private val reportGenerator: SobrietyReportGenerator,
     private val privateDnsWatchdog: PrivateDnsWatchdog,
     private val vpnStateStore: VpnStateStore,
+    private val backupRepository: RecoveryBackupRepository,
 ) : ViewModel() {
 
     private val _status = MutableStateFlow<String?>(null)
     private val _report = MutableStateFlow<File?>(null)
     private val _reportBusy = MutableStateFlow(false)
+    private val _backupBusy = MutableStateFlow(false)
+    private val _pendingRestore = MutableStateFlow<PreparedRestore?>(null)
+
+    /**
+     * Held only in memory, and only between the passphrase dialog and the write.
+     * It is deliberately not in Compose `rememberSaveable` state, which would
+     * write it into the saved instance state Bundle on disk.
+     */
+    private var pendingExportPassphrase: CharArray? = null
+    private var pendingRestoreUri: Uri? = null
+
+    /**
+     * Whether the last export or restore has actually run to completion. The
+     * protection gate can park either one behind the Guardian PIN, and it can be
+     * dismissed instead of cleared, so the UI needs to tell "still waiting on the
+     * user" apart from "finished, here is the result".
+     */
+    private var exportSettled = true
+    private var restoreSettled = true
 
     private val reportState = combine(_report, _reportBusy) { file, busy -> file to busy }
+    private val backupState = combine(_backupBusy, _pendingRestore) { busy, pending -> busy to pending }
 
     private val baseState = combine(
         settingsRepository.settings,
@@ -82,6 +126,7 @@ class RecoverySettingsViewModel @Inject constructor(
         vpnStateStore.state,
         _status,
         reportState,
+        backupState,
     ) {         values: Array<Any?> ->
         val settings = values[0] as SettingsState
         val metrics = values[1] as RecoveryMetrics
@@ -93,6 +138,7 @@ class RecoverySettingsViewModel @Inject constructor(
         val vpn = values[7] as dev.gamblock.core.model.VpnRuntimeState
         val status = values[8] as String?
         val report = values[9] as Pair<File?, Boolean>
+        val backup = values[10] as Pair<Boolean, PreparedRestore?>
         val file = report.first
         val busy = report.second
         RecoverySettingsUiState(
@@ -116,14 +162,54 @@ class RecoverySettingsViewModel @Inject constructor(
             statusMessage = status,
             reportFile = file,
             reportBusy = busy,
+            backupBusy = backup.first,
+            pendingRestore = backup.second?.let(::toPreview),
         )
     }
+
+    private fun toPreview(prepared: PreparedRestore) = BackupRestorePreview(
+        daysClean = prepared.summary.daysClean,
+        journalEntries = prepared.summary.journalEntries,
+        customExceptions = prepared.summary.customExceptions,
+        fortressWindows = prepared.summary.fortressWindows,
+        milestonesReached = prepared.summary.milestonesReached,
+        weeklySpendMinor = prepared.summary.weeklySpendMinor,
+        currency = RecoveryCurrency.fromCodeOrSymbol(prepared.summary.currencyCode, null),
+        exportedAtEpochMs = prepared.summary.exportedAtEpochMs,
+        appVersionName = prepared.summary.appVersionName,
+    )
 
     val uiState: StateFlow<RecoverySettingsUiState> =
         baseState.stateIn(viewModelScope, SharingStarted.Eagerly, RecoverySettingsUiState())
 
     init {
         privateDnsWatchdog.start()
+        watchForDismissedBackup()
+    }
+
+    /**
+     * A parked export or restore only reports a result if the gate is actually
+     * cleared. If the user dismisses the gate instead, nothing ever calls back, so
+     * the buttons would stay disabled forever with a passphrase still in memory.
+     * Watching the gate close without a settled action is what releases it.
+     */
+    private fun watchForDismissedBackup() {
+        viewModelScope.launch {
+            gateHolder.state.collect { gate ->
+                if (gate.isVisible) return@collect
+                if (!exportSettled && _backupBusy.value) {
+                    exportSettled = true
+                    clearExportPassphrase()
+                    if (pendingRestoreUri != null || _pendingRestore.value != null) return@collect
+                    _status.value = "Backup cancelled"
+                    _backupBusy.value = false
+                } else if (!restoreSettled && _backupBusy.value) {
+                    restoreSettled = true
+                    _backupBusy.value = false
+                    _status.value = "Restore cancelled"
+                }
+            }
+        }
     }
 
     fun setUrgeTimerEnabled(enabled: Boolean) {
@@ -315,5 +401,173 @@ class RecoverySettingsViewModel @Inject constructor(
 
     fun clearStatus() {
         _status.value = null
+    }
+
+    // ---------------------------------------------------------------------
+    // Encrypted backup and restore
+    // ---------------------------------------------------------------------
+
+    /**
+     * Called once the user has typed and confirmed an export passphrase. The
+     * passphrase is parked in memory only; the caller then launches the system
+     * file picker and hands the chosen Uri to [exportTo].
+     */
+    fun stageExportPassphrase(passphrase: CharArray) {
+        clearExportPassphrase()
+        pendingExportPassphrase = passphrase
+    }
+
+    /**
+     * Writes the backup to the Uri the user picked.
+     *
+     * Exporting hands the journal to a file on shared storage, so it clears the
+     * same sensitive-change gate as a history clear. That gate can *park* the
+     * request behind the Guardian PIN, which means the passphrase has to outlive
+     * this call: the running action reads it from [pendingExportPassphrase] at the
+     * moment it fires, because zeroing it on return would hand the parked export
+     * a key full of spaces.
+     */
+    fun exportTo(uri: Uri) {
+        if (pendingExportPassphrase == null) {
+            _status.value = "Choose a backup passphrase first"
+            return
+        }
+        if (_backupBusy.value) return
+        _backupBusy.value = true
+        exportSettled = false
+        viewModelScope.launch {
+            gateHolder.requestSensitiveChange {
+                val passphrase = pendingExportPassphrase
+                if (passphrase == null) {
+                    finishExport("That backup was cancelled")
+                } else {
+                    runExport(uri, passphrase)
+                }
+            }
+        }
+    }
+
+    private suspend fun runExport(uri: Uri, passphrase: CharArray) {
+        backupRepository.createBackup(uri, passphrase)
+            .onSuccess { summary -> finishExport(exportSuccessCopy(summary)) }
+            .onFailure { error -> finishExport(describeBackupError(error)) }
+    }
+
+    private fun finishExport(message: String) {
+        _status.value = message
+        _backupBusy.value = false
+        exportSettled = true
+        clearExportPassphrase()
+    }
+
+    private fun exportSuccessCopy(summary: dev.gamblock.core.model.BackupSummary): String =
+        "Backup saved: ${summary.journalEntries} journal entries, " +
+            "${summary.customExceptions} custom exceptions"
+
+    /** The user picked a file; the passphrase comes next. */
+    fun stageRestoreUri(uri: Uri) {
+        pendingRestoreUri = uri
+    }
+
+    /**
+     * Opens the chosen file with the given passphrase and, on success, raises the
+     * confirmation preview. Nothing is written until [confirmRestore].
+     *
+     * Reading is not put behind the Guardian gate: it writes nothing, and refusing
+     * to show somebody their own backup behind a PIN prompt protects nobody.
+     */
+    fun openRestore(passphrase: CharArray) {
+        val uri = pendingRestoreUri
+        pendingRestoreUri = null
+        if (uri == null) {
+            _status.value = "Choose a backup file first"
+            return
+        }
+        if (_backupBusy.value) return
+        _backupBusy.value = true
+        viewModelScope.launch {
+            try {
+                backupRepository.prepareRestore(uri, passphrase)
+                    .onSuccess { prepared ->
+                        _pendingRestore.value = prepared
+                        _backupBusy.value = false
+                    }
+                    .onFailure { error ->
+                        _status.value = describeBackupError(error)
+                        _backupBusy.value = false
+                    }
+            } finally {
+                passphrase.fill(' ')
+            }
+        }
+    }
+
+    /**
+     * The user confirmed the preview, so the swap happens now.
+     *
+     * A restore rewrites the clean streak and the protection configuration, so it
+     * clears the sensitive-change gate like any other protected change. The parked
+     * action keeps a reference to the same validated payload the user was shown, so
+     * what gets applied is exactly what the confirmation described.
+     */
+    fun confirmRestore() {
+        val prepared = _pendingRestore.value ?: return
+        if (_backupBusy.value) return
+        _backupBusy.value = true
+        restoreSettled = false
+        viewModelScope.launch {
+            gateHolder.requestSensitiveChange {
+                backupRepository.applyRestore(prepared)
+                    .onSuccess { summary ->
+                        finishRestore(
+                            "Restored: ${'$'}{summary.journalEntries} journal entries, " +
+                                "${'$'}{summary.customExceptions} custom exceptions",
+                        )
+                    }
+                    .onFailure { error -> finishRestore(describeBackupError(error)) }
+            }
+        }
+    }
+
+    private fun finishRestore(message: String) {
+        _status.value = message
+        _pendingRestore.value = null
+        _backupBusy.value = false
+        restoreSettled = true
+    }
+
+    fun dismissRestorePreview() {
+        _pendingRestore.value = null
+        pendingRestoreUri = null
+    }
+
+    override fun onCleared() {
+        // Never leave a passphrase in memory once the screen is gone.
+        clearExportPassphrase()
+        super.onCleared()
+    }
+
+    private fun clearExportPassphrase() {
+        pendingExportPassphrase?.fill(' ')
+        pendingExportPassphrase = null
+    }
+
+    /**
+     * Turns a failure into something a person can act on. The repository publishes
+     * the copy so the wording lives next to the exceptions it describes, and no
+     * passphrase or payload content is ever included in it.
+     */
+    private fun describeBackupError(error: Throwable): String {
+        var cause: Throwable? = error
+        while (cause != null) {
+            RecoveryBackupRepository.USER_FACING[cause.javaClass.name]?.let { return it }
+            cause = cause.cause
+        }
+        // The passphrase policy throws IllegalArgumentException. The dialog should
+        // have caught it first, but a raw exception must never reach the screen.
+        if (error is IllegalArgumentException || error is IllegalStateException) {
+            return "That passphrase is not usable. Use at least 8 characters."
+        }
+        return "Backup could not be completed. Nothing on this device was changed."
     }
 }
