@@ -1,0 +1,34 @@
+Shield blocks gambling where it actually happens: at the DNS layer, on your device, before a betting site can load a single pixel.
+
+▌BLOCKING THAT HOLDS
+• On-device DNS blocking through Android's local VPN. No browser extension, no safe-browsing list you have to trust.
+• Leak-proof by design. Queries are answered or refused on the phone. Your browsing history is never uploaded anywhere, because it never leaves.
+• Gambling apps are blocked too, not just websites.
+• Signed, automatically updating blocklists, with a local seed list so protection works the moment you install, even offline.
+• Your own exceptions list. Blocking a site you actually need is one tap to fix.
+
+▌WHEN THE URGE HITS
+• A 15-minute cooling-off timer that stands between you and a decision you would rather make later.
+• A typed pledge, not just a button. The friction is the point.
+• Fortress windows: schedule lock-downs for the hours you know are dangerous.
+• Guardian PIN. Turning protection off takes a deliberate extra step, not a stray tap.
+
+▌RECOVERY, TRACKED HONESTLY
+• Day count and money-saved estimate from your own weekly spend.
+• Craving journal with triggers, so you can see the pattern instead of guessing at it.
+• One-tap sobriety PDF report, generated locally, for a counsellor or a sponsor.
+• Milestones that mark how far you have actually come.
+
+▌YOUR DATA STAYS YOURS
+• No ads. No analytics. No crash reporters. No tracking. Every dependency is Jetpack, AndroidX, or built by us.
+• Encrypted backup and restore. Exports are sealed with AES-256-GCM and a key only you hold. Forget the passphrase and the file is unreadable, by anyone, including us.
+• Your Guardian PIN is never written into a backup.
+• Accountability pairing is entirely optional and off by default.
+
+▌BUILT FOR THE HARD DAYS
+• An offline crisis and helpline directory, so the number you need is never behind a network request.
+• Honest, plain-language copy. No shame, no streaks to lose over a missed day.
+
+Free. No account required. No upsells. Open source and auditable.
+
+Shield is not a substitute for professional care, therapy, or medical advice. If you are in crisis, please contact a local helpline or emergency services.

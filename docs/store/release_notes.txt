@@ -1,0 +1,9 @@
+First release of Shield.
+
+• Gambling blocked at the DNS layer, on your device. Gambling apps blocked too.
+• 15-minute urge cooling-off timer with a typed pledge.
+• Fortress lock-down windows and a Guardian PIN, so turning protection off is deliberate.
+• Recovery streak, money-saved estimate, craving journal and milestones.
+• Encrypted AES-256 backup and restore, with a key only you hold.
+• Offline crisis helpline directory.
+• No ads, no analytics, no crash reporters, no tracking.

@@ -1,0 +1,59 @@
+Google Play Store listing kit — Shield (dev.gamblock.shield)
+Version: 1.0.0   (versionCode 3)
+============================================================
+
+PRIMARY CATEGORY
+  Application > Health & Fitness
+    Rationale: the product pairs a blocking tool with a recovery and
+    wellbeing practice (streaks, urges, milestones, sobriety reports).
+    This is the category that matches what the user is buying.
+
+  Secondary category
+  Application > Tools
+    Rationale: the DNS/VPN blocklist engine is a utility in its own right
+    and this is where users look for network and ad-blocking tools.
+
+  Play Console path: Store settings > Main store listing > Category
+
+TAGS (5, as required by the Play Console tag selector)
+  1. Digital Wellbeing      <- primary relevance, keep this one
+  2. Self-Improvement
+  3. Productivity
+  4. Tools
+  5. Lifestyle
+
+  The five tag slots above are the full set available for this listing.
+  "Digital Wellbeing" is deliberately first: it is the intent the store
+  search ranking rewards, and it is what the screenshots and short
+  description actually demonstrate.
+
+  Play Console path: Store settings > Main store listing > Tags
+
+FILE MAP
+  app_title.txt             30-char limit   -> "Shield — Gambling Protection"   (28)
+  short_description.txt     80-char limit   -> behavioral recovery + urge cooling-off
+  full_description.txt      4000-char limit -> structured, Unicode bullets
+  release_notes.txt         500-char limit  -> v1.0.0
+  google_play_data_safety.md              -> Data Safety questionnaire answers
+  store_tags.txt            (this file)     -> category and tags
+
+BEFORE YOU PUBLISH
+  • Screenshots: 2 to 8, 16:9 or 9:16, 320 px minimum per side. Not in
+    this kit, because they need real captures from a device.
+  • Feature graphic: 1024 x 500 PNG, required. Not in this kit.
+  • Content rating questionnaire must be completed in the Console. The
+    app is rated for adults; see the target-audience section of
+    google_play_data_safety.md.
+  • The Data Safety answers in this kit assume Accountability pairing is
+    OFF at submission time, which is the default. If you enable it
+    before submitting, the answers change. Read the warnings in
+    google_play_data_safety.md before answering.
+
+COPY-PASTE ORDER IN THE CONSOLE
+  Title            <- app_title.txt
+  Short description<- short_description.txt
+  Full description <- full_description.txt
+  Category         <- see above
+  Tags             <- see above
+  Release notes    <- release_notes.txt (500 char limit, editor will
+                     warn you if you exceed it)
