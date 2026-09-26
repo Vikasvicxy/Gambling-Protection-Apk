@@ -152,11 +152,15 @@ through the support address below.
 
 ## 7. Contact
 
-* **Support / privacy / deletion requests:** `privacy@gamblock.dev`
-* **Security reports:** `security@gamblock.dev`
+* **Support / privacy / deletion / security requests:**
+  https://github.com/Vikasvicxy/Gambling-Protection-Apk/issues
 * **Repository:** https://github.com/Vikasvicxy/Gambling-Protection-Apk
 
-> Replace the two addresses above with mailboxes you actually monitor before
-> submitting. Google Play requires a monitored contact address on the Data
-> Safety form, and an unmonitored one is a common reason for a form to be
-> rejected or for a listing to be pulled after review.
+> The contact channel is the public GitHub issue tracker; there is no separate
+> monitored mailbox. An issue URL satisfies the Data Safety contact field. If a
+> reviewer insists on an email address, add a real monitored mailbox here and
+> update `docs/privacy-policy.md` and `docs/index.html` in the same change, so
+> the three never disagree.
+>
+> The tracker is public. Askers should open an issue stating only that a
+> request exists, then move personal data to a private channel.

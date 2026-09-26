@@ -91,14 +91,17 @@ fun SupportRoute(
             Spacer(Modifier.height(16.dp))
 
             ShieldButton(
-                text = "Email support",
+                text = "Report an issue",
                 onClick = {
-                    val intent = Intent(Intent.ACTION_SENDTO).apply {
-                        data = Uri.parse("mailto:support@gamblock.dev")
-                        putExtra(Intent.EXTRA_SUBJECT, "Shield support")
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        data = Uri.parse("https://github.com/Vikasvicxy/Gambling-Protection-Apk/issues")
                     }
-                    context.startActivity(intent)
+                    runCatching { context.startActivity(intent) }
                 },
+            )
+            ShieldText(
+                "Opens the public GitHub issue tracker. Please leave personal recovery details out of it.",
+                style = MaterialTheme.typography.bodySmall,
             )
         }
     })

@@ -10,7 +10,7 @@
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.3-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Material 3](https://img.shields.io/badge/UI-Material%203-757575?style=flat-square&logo=materialdesign&logoColor=white)](https://m3.material.io)
 [![AGP](https://img.shields.io/badge/AGP-9.4-3DDC84?style=flat-square&logo=android&logoColor=white)](https://developer.android.com/build)
-[![License](https://img.shields.io/badge/license-see%20repo-8A8A8A?style=flat-square)](#license)
+[![License](https://img.shields.io/badge/license-Apache%202.0-D22128?style=flat-square&logo=apache&logoColor=white)](LICENSE)
 
 Local DNS blocking · Urge cooling-off · Recovery tracking · AES-256 encrypted backups
 

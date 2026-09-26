@@ -165,13 +165,14 @@ updated policy applies.
 
 ## 12. Contact
 
-- **Privacy and data deletion:** privacy@gamblock.dev
-- **Security reports:** security@gamblock.dev
-- **Source and issues:** https://github.com/Vikasvicxy/Gambling-Protection-Apk
+- **Privacy questions, data deletion, and security reports:**
+  <https://github.com/Vikasvicxy/Gambling-Protection-Apk/issues>
+- **Source:** <https://github.com/Vikasvicxy/Gambling-Protection-Apk>
 
-> Replace the addresses above with mailboxes you actually monitor before
-> submitting to Google Play. An unmonitored contact address is a common reason
-> for a Data Safety form to be rejected.
+The issue tracker is public, so please open an issue to say that a request
+exists rather than posting personal recovery details, journal entries or
+screenshots. A maintainer will arrange a private channel before any personal
+data is exchanged.
 
 ## 13. On the "no tracking" claim
 
