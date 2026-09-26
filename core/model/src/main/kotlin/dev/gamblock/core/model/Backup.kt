@@ -127,6 +127,10 @@ object BackupSchema {
      * come back would quietly lose recovery history.
      */
     fun migrate(payload: RecoveryBackupPayload): RecoveryBackupPayload {
+        // Refuse a newer file before doing anything else: guessing at fields this
+        // build does not understand would silently drop recovery history.
+        requireSupported(payload.schemaVersion)
+
         var current = payload
         var version = current.schemaVersion
 

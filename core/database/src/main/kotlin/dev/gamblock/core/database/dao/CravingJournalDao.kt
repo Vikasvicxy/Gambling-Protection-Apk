@@ -13,8 +13,20 @@ interface CravingJournalDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entry: CravingJournalEntity): Long
 
+    /**
+     * Bulk insert used by backup restore. Deliberately ABORT rather than REPLACE:
+     * restore preserves original ids, so a payload that repeats an id is corrupt
+     * and has to fail the surrounding transaction instead of silently collapsing
+     * two journal rows into one.
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertAll(entries: List<CravingJournalEntity>)
+
     @Query("SELECT * FROM craving_journal_entries ORDER BY occurredAtEpochMs DESC")
     fun observeAll(): Flow<List<CravingJournalEntity>>
+
+    @Query("SELECT * FROM craving_journal_entries ORDER BY occurredAtEpochMs DESC")
+    suspend fun findAll(): List<CravingJournalEntity>
 
     @Query("SELECT * FROM craving_journal_entries ORDER BY occurredAtEpochMs DESC LIMIT :limit")
     suspend fun recent(limit: Int): List<CravingJournalEntity>

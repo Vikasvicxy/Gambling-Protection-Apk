@@ -314,6 +314,29 @@ class RecoveryRepository @Inject constructor(
         snapshot.enabled && snapshot.lockedDown
     }
 
+    /**
+     * Replaces the recovery scalars from a backup payload in a single DataStore
+     * edit, so a restore never leaves spend, currency, streak date and Fortress
+     * windows disagreeing with each other. Values arrive already normalised by
+     * `BackupPayloadValidator`; they are sanitised again here because this is the
+     * only place that actually owns the write.
+     */
+    suspend fun applyBackupPreferences(payload: dev.gamblock.core.model.RecoveryBackupPayload) =
+        withContext(dispatchers.io) {
+            dataStore.edit { prefs ->
+                prefs[KEY_WEEKLY_SPEND] = FinancialProfile.sanitize(payload.profile.weeklySpendMinor)
+                prefs[KEY_CURRENCY] = payload.profile.currencyCode
+                    .takeIf { it.isNotBlank() }
+                    ?: RecoveryCurrency.default.code
+                val start = payload.profile.recoveryStartEpochMs
+                if (start == null) prefs.remove(KEY_RECOVERY_START) else prefs[KEY_RECOVERY_START] = start
+                prefs[KEY_FORTRESS_ENABLED] = payload.fortress.enabled
+                prefs[KEY_FORTRESS_WINDOWS] = json.encodeToString(
+                    payload.fortress.windows.map(FortressWindow::sanitize),
+                )
+            }
+        }
+
     fun fortressStatusAt(nowEpochMs: Long): dev.gamblock.core.model.FortressStatus {
         val snapshot = _fortress.value
         if (!snapshot.enabled) return dev.gamblock.core.model.FortressStatus()

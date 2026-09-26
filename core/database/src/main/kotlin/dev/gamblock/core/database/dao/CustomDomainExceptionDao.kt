@@ -13,6 +13,10 @@ interface CustomDomainExceptionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: CustomDomainExceptionEntity): Long
 
+    /** Bulk upsert for backup restore; see [CravingJournalDao.insertAll]. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(entities: List<CustomDomainExceptionEntity>)
+
     @Query("SELECT * FROM custom_domain_exceptions ORDER BY createdAtEpochMs DESC")
     fun observeAll(): Flow<List<CustomDomainExceptionEntity>>
 
@@ -21,6 +25,10 @@ interface CustomDomainExceptionDao {
 
     @Query("DELETE FROM custom_domain_exceptions WHERE id = :id")
     suspend fun delete(id: Long)
+
+    /** Used by backup restore, which replaces the table inside one transaction. */
+    @Query("DELETE FROM custom_domain_exceptions")
+    suspend fun clear()
 
     @Query("DELETE FROM custom_domain_exceptions WHERE expiresAtEpochMs IS NOT NULL AND expiresAtEpochMs <= :nowEpochMs")
     suspend fun deleteExpired(nowEpochMs: Long): Int
