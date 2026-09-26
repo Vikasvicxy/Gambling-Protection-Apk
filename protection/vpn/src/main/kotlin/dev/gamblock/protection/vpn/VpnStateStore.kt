@@ -56,12 +56,18 @@ class VpnStateStore @Inject constructor() {
         _state.value = prev.copy(exceptionsApplied = prev.exceptionsApplied + 1)
     }
 
+    fun recordQuicDrop() {
+        val prev = _state.value
+        _state.value = prev.copy(quicDrops = prev.quicDrops + 1)
+    }
+
     fun resetCounters() {
         _state.value = _state.value.copy(
             queriesHandled = 0L,
             queriesBlocked = 0L,
             queriesAllowed = 0L,
             exceptionsApplied = 0L,
+            quicDrops = 0L,
         )
     }
 }

@@ -28,6 +28,7 @@ import dev.gamblock.protection.domainengine.DomainBlocker
 import dev.gamblock.protection.dns.DnsParser
 import dev.gamblock.protection.dns.DnsResponseFactory
 import dev.gamblock.protection.dns.IpPacketCodec
+import dev.gamblock.protection.dns.QuicFilter
 import dev.gamblock.protection.dns.UdpPacket
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -371,6 +372,11 @@ class ShieldVpnService : VpnService() {
         if (udp == null) {
             // Non-DNS traffic on the tun (e.g. IPv6 router-solicitation, DoT probes) is ignored by design.
             logger.d(Logs.DNS, "tun ${length}B dropped: not IPv4/IPv6 UDP")
+            return
+        }
+        if (QuicFilter.shouldDrop(udp, settingsRepository.settings.value.blockEncryptedBrowsers)) {
+            stateStore.recordQuicDrop()
+            logger.d(Logs.DNS, "tun ${length}B dropped: QUIC/UDP ${udp.dstPort} forces TCP fallback")
             return
         }
         if (udp.dstPort != VpnConfig.DNS_PORT) {

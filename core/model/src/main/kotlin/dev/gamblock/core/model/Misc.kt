@@ -12,6 +12,8 @@ data class VpnRuntimeState(
     val queriesAllowed: Long = 0L,
     /** Queries the block engine would have blocked but a custom user exception let through. */
     val exceptionsApplied: Long = 0L,
+    /** QUIC / HTTP-3 UDP 443 packets silently dropped to force TCP fallback. */
+    val quicDrops: Long = 0L,
     val failure: VpnFailure? = null,
     /** True when the VPN service was explicitly stopped by the user request. */
     val userStopped: Boolean = false,

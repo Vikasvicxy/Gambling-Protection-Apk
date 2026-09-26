@@ -3,6 +3,7 @@ package dev.gamblock.protection.domainengine
 import dev.gamblock.core.model.util.stableHash
 import dev.gamblock.core.model.BlockDecision
 import dev.gamblock.core.model.DecisionKind
+import dev.gamblock.core.model.EncryptedDnsPolicy
 
 /**
  * Turns a [DomainIndex] lookup into a [BlockDecision]. The schedule gate is applied
@@ -11,6 +12,7 @@ import dev.gamblock.core.model.DecisionKind
  */
 class DecisionEngine(
     private val index: DomainIndex,
+    private val blockDohBootstrap: Boolean = true,
 ) {
     fun decide(host: String, scheduleActive: Boolean): BlockDecision {
         val normalized = DomainNormalizer.normalize(host)
@@ -28,6 +30,15 @@ class DecisionEngine(
                 ruleHit = null,
                 signature = stableHash("schedule:$normalized").toString(),
                 reason = "outside active protection schedule",
+            )
+        }
+
+        if (blockDohBootstrap && EncryptedDnsPolicy.isDohBootstrapHost(normalized)) {
+            return BlockDecision(
+                decision = DecisionKind.BLOCK,
+                ruleHit = null,
+                signature = stableHash("doh:$normalized").toString(),
+                reason = "DNS-over-HTTPS bootstrap host: forces resolver back to local port 53",
             )
         }
 

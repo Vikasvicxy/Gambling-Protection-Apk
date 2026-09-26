@@ -6,6 +6,7 @@ import android.service.quicksettings.TileService
 import dagger.hilt.android.AndroidEntryPoint
 import dev.gamblock.core.common.logging.Logs
 import dev.gamblock.core.common.logging.ShieldLogger
+import dev.gamblock.data.preferences.RecoveryRepository
 import dev.gamblock.data.preferences.SettingsRepository
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +28,7 @@ class ProtectionTileService : TileService() {
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var stateStore: VpnStateStore
     @Inject lateinit var logger: ShieldLogger
+    @Inject lateinit var recoveryRepository: RecoveryRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var observeJob: Job? = null
@@ -64,9 +66,27 @@ class ProtectionTileService : TileService() {
 
         when (state.ui) {
             ProtectionTileUi.ACTIVE -> {
-                scope.launch { settingsRepository.setVpnEnabled(false) }
-                ShieldVpnService.stop(this)
-                logger.i(Logs.VPN, "tile: protection off")
+                // A tile tap must not be a way around Fortress mode. When a
+                // window is locked we send the user into the app to the screen
+                // that can actually show them why.
+                scope.launch {
+                    val settings = settingsRepository.settings.value
+                    val locked = settings.fortressModeEnabled &&
+                        recoveryRepository.isFortressLockedDown()
+                    if (locked) {
+                        logger.i(Logs.SECURITY, "tile: disable refused by fortress window")
+                        openApp("recovery")
+                        return@launch
+                    }
+                    if (settings.urgeTimerEnabled || guardianPinBlocksTile()) {
+                        openApp("recovery")
+                        return@launch
+                    }
+                    settingsRepository.setVpnEnabled(false)
+                    ShieldVpnService.stop(this@ProtectionTileService)
+                    logger.i(Logs.VPN, "tile: protection off")
+                    syncNow()
+                }
             }
             ProtectionTileUi.INACTIVE,
             ProtectionTileUi.UNAVAILABLE,
@@ -79,6 +99,16 @@ class ProtectionTileService : TileService() {
             }
         }
         syncNow()
+    }
+
+    private suspend fun guardianPinBlocksTile(): Boolean =
+        settingsRepository.settings.value.guardianPinEnabled
+
+    private fun openApp(destination: String) {
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName) ?: return
+        launchIntent.putExtra("dev.gamblock.shield.extra.NAV_DESTINATION", destination)
+        launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivityAndCollapse(launchIntent)
     }
 
     override fun onDestroy() {
