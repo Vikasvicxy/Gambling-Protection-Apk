@@ -75,9 +75,9 @@ class BackupCryptoManager(
         require(passphrase.isNotEmpty()) { "passphrase must not be empty" }
 
         val body = envelope.copyOfRange(HEADER_LENGTH, envelope.size)
-            if (body.size < TAG_LENGTH_BYTES) {
-                throw InvalidBackupFormatException("backup payload is truncated")
-            }
+        if (body.size < TAG_LENGTH_BYTES) {
+            throw InvalidBackupFormatException("backup payload is truncated")
+        }
         return try {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(
