@@ -237,6 +237,45 @@ The privacy site is a single self-contained page with **zero external requests**
 
 ## License
 
-Source is provided for review and contribution. The repository does not yet carry
-a license file — **add one before distributing a build**, or the default
-"all rights reserved" applies and nobody may legally reuse it.
+Shield is open source under the [Apache License 2.0](LICENSE).
+
+You may use, modify and redistribute it, including commercially, provided you
+keep the NOTICE-style attribution and state any changes. The licence text is
+verbatim upstream, with the appendix copyright filled in as
+`Copyright 2026 Gamblock`.
+
+Third-party components keep their own licences — see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and
+[OPEN_SOURCE_INVENTORY.md](OPEN_SOURCE_INVENTORY.md). Note the `serverless/worker`
+package carries its own `package.json` dependency set, which is tracked
+separately from the Android build.
+
+---
+
+## GitHub Pages
+
+The privacy policy site is published from this repository.
+
+**Repository setting — set this once, manually:**
+
+```
+Settings → Pages → Build and deployment
+  Source:      Deploy from a branch
+  Branch:      master
+  Folder:      /docs
+```
+
+It serves <https://vikasvicxy.github.io/Gambling-Protection-Apk/> from
+`docs/index.html`. There is no build step: the page is one self-contained file
+with inline CSS and no external requests, so `master` + `/docs` needs no Jekyll
+configuration and no `Gemfile`.
+
+**The `gh-pages` branch in this repo is not the Pages source.** It belongs to
+`blocklist-release.yml`, which publishes signed blocklist artifacts to
+`gh-pages/canary/` and `gh-pages/stable/`. The app fetches those from a
+*separate* repository at `gamblock.github.io/shield-blocklist/stable/`, so
+pointing Pages at `master /docs` does not disturb the update feed.
+
+If Pages is ever re-pointed at the `gh-pages` branch, the privacy site will
+disappear and the blocklist feed URL will break instead. Keep Pages on
+`master /docs`.
