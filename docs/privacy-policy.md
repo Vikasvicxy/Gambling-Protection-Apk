@@ -43,6 +43,9 @@ Guardian PIN, encrypted backups — never leaves the device.
 - No data broker, no attribution SDK, no session recording.
 - No background upload of journal, notes or streak.
 - No selling or sharing of data for money.
+- No lookup of your installed apps against any server. The app risk scan matches
+  app names against a static table inside the app, entirely offline, and takes no
+  action on what it finds.
 
 This is verifiable rather than a promise: every dependency is Jetpack, AndroidX,
 kotlinx, or first-party. There is no Firebase, Crashlytics, ad network or
@@ -68,6 +71,9 @@ traffic payload is ever uploaded.**
 | Data | Where | Why |
 | --- | --- | --- |
 | Clean streak, start date, money-saved estimate | On-device DB / preferences | Show progress. Self-declared spend, never transmitted. |
+| Days Shield was observed running | On-device DB / preferences | The money-saved estimate counts only these days, so it cannot credit days you were not protected. Never transmitted. |
+| Per-app split tunneling choices | On-device DB / preferences | Your own exemption list. Never transmitted. |
+| Installed app names and labels, read for the app risk scan | Read on-device, **not stored** | Match against a static table shipped inside the app. The scan is advisory and takes no action. Nothing is uploaded. |
 | Craving journal and triggers | On-device Room/SQLite DB | Spot patterns. Never uploaded. |
 | Custom exceptions and blocklist | On-device DB | Your own allow/deny decisions. Local only. |
 | Fortress window schedules | On-device DB | Lock down during your high-risk hours. |

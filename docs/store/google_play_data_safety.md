@@ -1,6 +1,6 @@
-# Google Play Data Safety — Shield (`dev.gamblock.shield`) v1.0.0
+# Google Play Data Safety — Shield (`dev.gamblock.shield`) v1.1.0
 
-Verified against the source in this repository on 2026-09-26. Not a legal
+Verified against the source in this repository on 2026-09-27 (v1.1.0). Not a legal
 opinion, and not a substitute for your own review. If any answer here does not
 match what the shipped binary does, the Data Safety form is wrong, not the app.
 
@@ -81,6 +81,15 @@ for the build as it stands today is **Yes**.
 **Not collected, and worth stating plainly:** no advertising ID, no
 cross-app identifier, no device fingerprint, no behavioural profile for ad
 targeting, no precise or coarse location, no contacts, no media, no keystores.
+
+**The app risk scan (v1.1.0) does not change any answer above.** It reads
+installed app labels and package names on device, matches them against a static
+table shipped inside the APK, shows the result, and discards the list. Nothing
+is stored, nothing is transmitted, and there is no server to look anything up
+against. Play's "App info" covers data that leaves the device or is retained;
+this neither does. It is worth knowing this is in the codebase, because a
+reviewer reading `GamblingAppScanner` will find package-name handling and should
+be able to confirm from the source that it is a local, read-only match.
 
 ---
 

@@ -1,9 +1,11 @@
-First release of Shield.
+Shield v1.1.0
 
-• Gambling blocked at the DNS layer, on your device. Gambling apps blocked too.
-• 15-minute urge cooling-off timer with a typed pledge.
-• Fortress lock-down windows and a Guardian PIN, so turning protection off is deliberate.
-• Recovery streak, money-saved estimate, craving journal and milestones.
-• Encrypted AES-256 backup and restore, with a key only you hold.
-• Offline crisis helpline directory.
-• No ads, no analytics, no crash reporters, no tracking.
+NEW
+- Exempt a banking or work app that will not run inside another VPN; all else stays filtered.
+- IPv6 protection closes a gap where IPv6 devices could bypass filtering.
+- App risk scan: offline scan of installed apps for betting/casino wording. Advisory only.
+- One-tap Safe Search assistance.
+
+MORE HONEST
+- Money saved counts only days Shield ran, with coverage shown. Unprotected days earn nothing.
+- Safe Search is offered, not enforced: only the engine's own setting filters.

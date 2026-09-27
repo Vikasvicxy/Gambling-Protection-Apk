@@ -1,5 +1,5 @@
 Google Play Store listing kit — Shield (dev.gamblock.shield)
-Version: 1.0.0   (versionCode 3)
+Version: 1.1.0   (versionCode 4)
 ============================================================
 
 PRIMARY CATEGORY
@@ -33,7 +33,11 @@ FILE MAP
   app_title.txt             30-char limit   -> "Shield — Gambling Protection"   (28)
   short_description.txt     80-char limit   -> behavioral recovery + urge cooling-off
   full_description.txt      4000-char limit -> structured, Unicode bullets
-  release_notes.txt         500-char limit  -> v1.0.0
+    release_notes.txt         500-char limit  -> v1.1.0 (498 chars)
+    release_notes_full.txt    no limit        -> v1.1.0 long form, for the
+                              GitHub release body. The Play field cannot hold it,
+                              so the short file is the one that goes in the
+                              Console.
   google_play_data_safety.md              -> Data Safety questionnaire answers
   store_tags.txt            (this file)     -> category and tags
 

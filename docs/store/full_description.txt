@@ -4,8 +4,12 @@ Shield blocks gambling where it actually happens: at the DNS layer, on your devi
 • On-device DNS blocking through Android's local VPN. No browser extension, no safe-browsing list you have to trust.
 • Leak-proof by design. Queries are answered or refused on the phone. Your browsing history is never uploaded anywhere, because it never leaves.
 • Gambling apps are blocked too, not just websites.
+• Per-app split tunneling: exempt a banking or work app that will not run inside another VPN, and everything else stays filtered. The trade-off is stated where you choose.
+• IPv6 leak protection: answers IPv6 lookups with an empty reply so your phone falls back to IPv4, where Shield is actually in the path. Without it, a device on native IPv6 could reach blocked sites without passing the filter.
+• App risk scan: sees through the apps Android lets Shield look at, for known betting and casino wording, entirely offline. It shows what it matched and takes no action: nothing uploaded, nothing deleted.
 • Signed, automatically updating blocklists, with a local seed list so protection works the moment you install, even offline.
 • Your own exceptions list. Blocking a site you actually need is one tap to fix.
+• One-tap Safe Search assistance for Google, Bing and DuckDuckGo. Offered, not enforced: Shield cannot force Safe Search under encryption, so set it in the engine's own settings, which is the only place it genuinely filters.
 
 ▌WHEN THE URGE HITS
 • A 15-minute cooling-off timer that stands between you and a decision you would rather make later.
@@ -14,7 +18,7 @@ Shield blocks gambling where it actually happens: at the DNS layer, on your devi
 • Guardian PIN. Turning protection off takes a deliberate extra step, not a stray tap.
 
 ▌RECOVERY, TRACKED HONESTLY
-• Day count and money-saved estimate from your own weekly spend.
+• Day count and a money-saved estimate from your own weekly spend — calculated from the days Shield was actually running, not from days on the calendar, with the coverage percentage shown next to it. A day with no protection earns nothing.
 • Craving journal with triggers, so you can see the pattern instead of guessing at it.
 • One-tap sobriety PDF report, generated locally, for a counsellor or a sponsor.
 • Milestones that mark how far you have actually come.

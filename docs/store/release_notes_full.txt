@@ -1,0 +1,31 @@
+Shield v1.1.0 - a feature release, and a more honest one.
+
+NEW
+- Per-app split tunneling. Exempt a banking or work app that will not run
+  inside another VPN, and Shield keeps filtering everything else. The trade-off
+  is stated plainly where you make the choice.
+- IPv6 leak protection. Answers IPv6 (AAAA) lookups with an empty reply so your
+  phone falls back to IPv4, where Shield is actually in the path. Previously a
+  device on native IPv6 could reach blocked sites without passing the filter.
+- App risk scan. Looks through the apps Shield can see for known betting and
+  casino wording, entirely on this phone, and shows what it matched. Nothing is
+  uploaded and nothing is deleted: it is a list of things worth a look.
+- One-tap Safe Search assistance for Google, Bing and DuckDuckGo.
+
+HONESTY CHANGES
+- Money saved is now calculated from the days Shield was actually running
+  rather than from days on the calendar, and the coverage percentage is shown
+  next to it. A day with no protection earns nothing. The streak is unchanged.
+- Safe Search is offered, not enforced. Shield cannot force Safe Search at DNS
+  level, because over an encrypted connection the search engine still sees the
+  address you typed. Set Safe Search in the engine's own settings; that is the
+  only place it genuinely filters.
+- The app risk scan covers only the apps Android lets Shield see. It is not a
+  full inventory of your phone.
+
+FIXES
+- The IPv6 gap is closed by suppressing AAAA rather than by routing IPv6 into a
+  tunnel that forwards no packets, which would have broken IPv6 entirely.
+
+No ads, no analytics, no crash reporters, no tracking. The risk scan is fully
+offline, and the savings figure never leaves the device.

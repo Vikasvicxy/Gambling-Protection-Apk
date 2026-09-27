@@ -92,11 +92,18 @@ android {
         applicationId = "dev.gamblock.shield"
         minSdk = 26
         targetSdk = 36
-        // First public Play release. versionCode must strictly increase on every
-        // upload to an existing app, so it moves 2 -> 3 even though the marketing
-        // version is the round 1.0.0.
-        versionCode = 3
-        versionName = "1.0.0"
+        // v1.1.0: the feature release carrying stages 1-4 (per-app split
+        // tunneling, IPv6 leak protection, SafeSearch assistance, the app risk
+        // scan, and coverage-based recovery savings).
+        //
+        // versionCode moves 3 -> 4, which is what Play actually requires on
+        // every upload to an existing app. The marketing version moves off
+        // 1.0.0 because a pushed `v1.0.0` tag already identifies the baseline:
+        // shipping new features under the version number that names different
+        // code would make the tag and the installed APK describe two different
+        // apps.
+        versionCode = 4
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
