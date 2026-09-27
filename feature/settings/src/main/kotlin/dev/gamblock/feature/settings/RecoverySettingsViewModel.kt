@@ -8,6 +8,7 @@ import dev.gamblock.core.model.CravingTrigger
 import dev.gamblock.core.model.FinancialProfile
 import dev.gamblock.core.model.FortressStatus
 import dev.gamblock.core.model.FortressWindow
+import dev.gamblock.core.model.GamblingAppScanner
 import dev.gamblock.core.model.InstalledAppCandidate
 import dev.gamblock.core.model.RecoveryCurrency
 import dev.gamblock.core.model.RecoveryMetrics
@@ -56,6 +57,7 @@ data class RecoverySettingsUiState(
     val quicDrops: Long = 0L,
     val ipv6Suppressed: Long = 0L,
     val searchEngineQueries: Long = 0L,
+    val appRiskScan: AppRiskScanUiState = AppRiskScanUiState(),
     val excludedPackages: Set<String> = emptySet(),
     val installableApps: List<InstalledAppCandidate> = emptyList(),
     val statusMessage: String? = null,
@@ -68,6 +70,22 @@ data class RecoverySettingsUiState(
      * their current data with.
      */
     val pendingRestore: BackupRestorePreview? = null,
+)
+
+/**
+ * Result of the offline gambling-app scan, for display only.
+ *
+ * [partialCoverage] is carried all the way to the screen because a clean scan
+ * does not mean a clean phone: Android 11+ only reveals the packages declared
+ * in the manifest `<queries>` element, so the honest phrasing is "nothing
+ * matched in the N apps Shield could see", never "your phone is clear".
+ */
+data class AppRiskScanUiState(
+    val scanning: Boolean = false,
+    val scannedCount: Int = 0,
+    val verdicts: List<GamblingAppScanner.Verdict> = emptyList(),
+    val partialCoverage: Boolean = true,
+    val error: String? = null,
 )
 
 /** What a backup file holds, shown before the user commits to restoring it. */
@@ -101,6 +119,8 @@ class RecoverySettingsViewModel @Inject constructor(
 
     private val _status = MutableStateFlow<String?>(null)
     private val _installableApps = MutableStateFlow<List<InstalledAppCandidate>>(emptyList())
+    private val _appRiskScan = MutableStateFlow(AppRiskScanUiState())
+    val appRiskScan: StateFlow<AppRiskScanUiState> = _appRiskScan.asStateFlow()
     private val _report = MutableStateFlow<File?>(null)
     private val _reportBusy = MutableStateFlow(false)
     private val _backupBusy = MutableStateFlow(false)
@@ -143,6 +163,7 @@ class RecoverySettingsViewModel @Inject constructor(
         reportState,
             backupState,
             exclusionState,
+            _appRiskScan,
         ) {         values: Array<Any?> ->
         val settings = values[0] as SettingsState
         val metrics = values[1] as RecoveryMetrics
@@ -156,6 +177,7 @@ class RecoverySettingsViewModel @Inject constructor(
         val report = values[9] as Pair<File?, Boolean>
             val backup = values[10] as Pair<Boolean, PreparedRestore?>
             val exclusion = values[11] as Pair<Set<String>, List<InstalledAppCandidate>>
+        val riskScan = values[12] as AppRiskScanUiState
         val file = report.first
         val busy = report.second
         RecoverySettingsUiState(
@@ -180,6 +202,7 @@ class RecoverySettingsViewModel @Inject constructor(
               quicDrops = vpn.quicDrops,
               ipv6Suppressed = vpn.ipv6Suppressed,
               searchEngineQueries = vpn.searchEngineQueries,
+              appRiskScan = riskScan,
             statusMessage = status,
             reportFile = file,
             reportBusy = busy,
@@ -290,6 +313,48 @@ class RecoverySettingsViewModel @Inject constructor(
             val current = appExclusionRepository.excludedPackages
             appExclusionRepository.toggle(packageName, packageName !in current)
         }
+    }
+
+    /**
+     * Runs the offline gambling-app scan over the apps the platform will show us.
+     *
+     * Kept on demand rather than on every settings visit for the same reason as
+     * [refreshInstallableApps]: the query touches a few hundred packages. The scan
+     * itself is pure and local, so there is no network cost to avoid - only the
+     * `PackageManager` walk.
+     *
+     * The result is advice, not action. Nothing here blocks, uninstalls, or
+     * exempts anything; see `GamblingAppScanner` for why a heuristic is not
+     * allowed to act on its own.
+     */
+    fun runAppRiskScan() {
+        if (_appRiskScan.value?.scanning == true) return
+        viewModelScope.launch {
+            _appRiskScan.value = AppRiskScanUiState(scanning = true)
+            val result = runCatching {
+                val candidates = installedAppsProvider.candidates(
+                    dispatcher = dispatchers.io,
+                    includeSystem = true,
+                )
+                GamblingAppScanner.scan(candidates)
+            }.getOrElse {
+                _appRiskScan.value = AppRiskScanUiState(
+                    scanning = false,
+                    error = "Could not read the installed app list.",
+                )
+                return@launch
+            }
+            _appRiskScan.value = AppRiskScanUiState(
+                scanning = false,
+                scannedCount = result.scannedCount,
+                verdicts = result.verdicts,
+                partialCoverage = result.partialCoverage,
+            )
+        }
+    }
+
+    fun clearAppRiskScan() {
+        _appRiskScan.value = AppRiskScanUiState()
     }
 
     /** Adds a package the user typed by hand, validating before it is stored. */

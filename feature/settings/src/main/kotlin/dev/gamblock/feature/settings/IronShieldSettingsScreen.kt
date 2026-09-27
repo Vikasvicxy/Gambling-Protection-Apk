@@ -221,6 +221,11 @@ fun IronShieldSettingsRoute(
                     onManualAdd = viewModel::addExclusionByPackageName,
                     onRemoveAll = viewModel::clearAllExclusions,
                 )
+                AppRiskScannerPanel(
+                    scan = state.appRiskScan,
+                    onScan = viewModel::runAppRiskScan,
+                    onDismiss = viewModel::clearAppRiskScan,
+                )
             }
 
             SettingsCategoryCard(
