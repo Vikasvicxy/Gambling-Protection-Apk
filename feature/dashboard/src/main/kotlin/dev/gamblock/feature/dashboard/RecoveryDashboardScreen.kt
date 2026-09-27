@@ -194,8 +194,20 @@ fun RecoveryMetricsSection(
             style = MaterialTheme.typography.headlineSmall,
         )
         ShieldText(
-            text = "Estimated money saved: " +
-                RecoveryCalculator.formatMoney(metrics.moneySavedMinor, metrics.currency),
+            text = "Protected for ${metrics.protectedDays} of ${metrics.daysClean} day(s)",
+            style = MaterialTheme.typography.bodySmall,
+            color = ShieldPalette.Orange,
+        )
+        ShieldText(
+            // Savings count observed protection, not elapsed days, so an
+            // unprotected day earns nothing. See RecoveryCoverage.
+            text = if (metrics.coverageKnown) {
+                "Estimated money saved: " +
+                    RecoveryCalculator.formatMoney(metrics.moneySavedMinor, metrics.currency) +
+                    " (${metrics.coveragePercent}% coverage)"
+            } else {
+                "Estimated money saved: counting starts after Shield has run for a day"
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = ShieldPalette.Green,
         )

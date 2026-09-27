@@ -39,5 +39,13 @@ Honest, user-facing and engineering-facing limits. Never claim "fully blocks eve
 - Shield **offers** a route to each search engine's own SafeSearch endpoint; it does not enforce SafeSearch. DNS-level forcing cannot work under TLS: the client sends the original hostname in SNI and Host, so substituting an address leaves the engine seeing the original query.
 - The UI says "offers" rather than "enforces" for this reason. Users should set SafeSearch in the engine's own settings, which is the only place it genuinely filters.
 
-## 8. Not-in-scope (honestly)
+## 8. Recovery savings figure
+- "Estimated money saved" is `weekly spend x protected days / 7`. It is an **estimate from a self-reported weekly figure**, not measured spending, and it is labelled "estimated" everywhere it appears.
+- It counts only days on which Shield was **observed running** (`RecoveryCoverage`). Days before the recovery start date, and days with a coverage gap, earn nothing. The coverage ratio and the number of unprotected days are shown next to the figure.
+- Before the first protected day is recorded, the figure reads "counting starts after Shield has run for a day" rather than `$0.00`, because "we have not observed protection" and "you saved nothing" are different claims.
+- The streak (`daysClean`) stays calendar-based and is deliberately **not** shrunk by coverage gaps. The streak is the behaviour being encouraged; the savings figure is the part that must not overstate.
+- **Granularity is one day**, marked as soon as the VPN establishes. This measures *whether* Shield ran, not how long it ran for: enabling Shield briefly each day would show full coverage. Documented rather than hidden. Per-minute uptime would not make the figure more meaningful about whether the user was protected when it mattered.
+- A corrupt or missing record degrades to "coverage unknown" (zero savings, `coverageKnown = false`), never to a higher claim.
+
+## 9. Not-in-scope (honestly)
 - Full-TUN/TCP inspection of non-DNS traffic; device-level MDM-like controls; real-time content filtering of HTTPS payloads; Windows/iOS versions.

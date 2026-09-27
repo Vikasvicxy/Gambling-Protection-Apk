@@ -109,6 +109,24 @@ data class RecoveryMetrics(
     val reachedMilestones: List<RecoveryMilestone> = emptyList(),
     val hasProfile: Boolean = false,
     val hasStartDate: Boolean = false,
+    /**
+     * Days on which Shield was observed running, within the tracked window.
+     *
+     * Not the same as [daysClean], and never larger than it. See
+     * [RecoveryCoverage] for why savings are computed from this rather than
+     * from elapsed time.
+     */
+    val protectedDays: Int = 0,
+    /**
+     * True once at least one protected day has been observed.
+     *
+     * When false, [moneySavedMinor] is zero because there is nothing to
+     * estimate from, which is a different statement from "you saved nothing".
+     * The UI shows a "starts after the first day" message instead of a figure.
+     */
+    val coverageKnown: Boolean = false,
+    /** [RecoveryCoverage.coveragePercent] of [protectedDays] over [daysClean]. */
+    val coveragePercent: Int = 0,
 ) {
     val currency: RecoveryCurrency
         get() = RecoveryCurrency.fromCodeOrSymbol(currencyCode, null)
@@ -118,16 +136,28 @@ data class RecoveryMetrics(
 
     val daysUntilNextMilestone: Int
         get() = nextMilestone?.let { (it.days - daysClean).coerceAtLeast(0) } ?: 0
+
+    /** Days elapsed without observed protection, for honest gap reporting. */
+    val unprotectedDays: Int
+        get() = if (coverageKnown) (daysClean - protectedDays).coerceAtLeast(0) else 0
 }
 
 object RecoveryCalculator {
 
     const val MAX_TRACKED_DAYS: Int = 100 * 365
 
+    /**
+     * @param protectedEpochDays days on which Shield was observed running, as
+     *   epoch-day numbers. Empty means "not observed yet", which yields a zero
+     *   savings figure with [RecoveryMetrics.coverageKnown] false, rather than
+     *   the old behaviour of extrapolating across every calendar day since the
+     *   start date.
+     */
     fun metrics(
         profile: FinancialProfile,
         nowEpochMs: Long,
         zoneId: ZoneId = ZoneId.systemDefault(),
+        protectedEpochDays: Set<Long> = emptySet(),
     ): RecoveryMetrics {
         val currencyCode = profile.currencyCode
         val spend = FinancialProfile.sanitize(profile.weeklySpendMinor)
@@ -136,14 +166,32 @@ object RecoveryCalculator {
             nowEpochMs = nowEpochMs,
             zoneId = zoneId,
         )
+        val protectedDays = RecoveryCoverage.protectedDays(
+            protectedEpochDays = protectedEpochDays,
+            startEpochMs = profile.recoveryStartEpochMs,
+            nowEpochMs = nowEpochMs,
+            zoneId = zoneId,
+        )
+        val coverageKnown = RecoveryCoverage.isKnown(protectedEpochDays)
         return RecoveryMetrics(
             daysClean = daysClean,
-            moneySavedMinor = moneySavedMinor(spend, daysClean),
+            // Saved money follows observed protection, not elapsed time. A user
+            // who was unprotected for three weeks is not owed three weeks of
+            // savings, and quoting it would be the kind of overstatement this
+            // figure gets shared to disprove.
+            moneySavedMinor = if (coverageKnown) moneySavedMinor(spend, protectedDays) else 0L,
             currencyCode = currencyCode,
             nextMilestone = nextMilestone(daysClean),
             reachedMilestones = reachedMilestones(daysClean),
             hasProfile = profile.hasProfile,
             hasStartDate = profile.recoveryStartEpochMs != null && daysClean > 0,
+            protectedDays = protectedDays,
+            coverageKnown = coverageKnown,
+            coveragePercent = if (coverageKnown) {
+                RecoveryCoverage.coveragePercent(protectedDays, daysClean)
+            } else {
+                0
+            },
         )
     }
 

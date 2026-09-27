@@ -250,14 +250,33 @@ fun IronShieldSettingsRoute(
                     text = "Days clean: ${state.metrics.daysClean}",
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                // Savings are derived from days Shield was actually observed
+                // running, not from elapsed time, so the figure is labelled with
+                // its basis. Showing a currency number derived from a calendar
+                // would credit the user for days they were not protected, and
+                // this is the number people screenshot as proof.
                 ShieldText(
-                    text = "Estimated saved: " + RecoveryCalculator.formatMoney(
-                        state.metrics.moneySavedMinor,
-                        state.metrics.currency,
-                    ),
+                    text = if (state.metrics.coverageKnown) {
+                        "Estimated saved from ${state.metrics.protectedDays} protected " +
+                            "day(s): " + RecoveryCalculator.formatMoney(
+                            state.metrics.moneySavedMinor,
+                            state.metrics.currency,
+                        )
+                    } else {
+                        "Estimated saved: starts counting after Shield has run for a day"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = ShieldPalette.Green,
                 )
+                if (state.metrics.coverageKnown && state.metrics.unprotectedDays > 0) {
+                    ShieldText(
+                        text = "Shield was not running on ${state.metrics.unprotectedDays} of " +
+                            "those days (${state.metrics.coveragePercent}% coverage). Those days " +
+                            "are not counted as saved.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ShieldPalette.Orange,
+                    )
+                }
                 Spacer(Modifier.height(4.dp))
                 ShieldButton(
                     text = "Generate Sobriety PDF Report",

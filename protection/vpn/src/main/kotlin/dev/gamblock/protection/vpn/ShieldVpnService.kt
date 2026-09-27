@@ -27,6 +27,7 @@ import dev.gamblock.core.model.SafeSearchPolicy
 import dev.gamblock.core.model.SearchEngineMatch
 import dev.gamblock.core.model.VpnRuntimeState
 import dev.gamblock.data.preferences.AppExclusionRepository
+import dev.gamblock.data.preferences.RecoveryRepository
 import dev.gamblock.data.preferences.SettingsRepository
 import dev.gamblock.protection.domainengine.DomainBlocker
 import dev.gamblock.protection.dns.DnsParser
@@ -84,6 +85,7 @@ class ShieldVpnService : VpnService() {
     @Inject lateinit var notificationManager: VpnNotificationManager
     @Inject lateinit var appExclusionApplier: AppExclusionApplier
     @Inject lateinit var appExclusionRepository: AppExclusionRepository
+    @Inject lateinit var recoveryRepository: RecoveryRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val lifecycleLock = Any()
@@ -290,6 +292,7 @@ class ShieldVpnService : VpnService() {
             pfd = established
             stateStore.markConnected(wallClock.nowEpochMillis())
             running = true
+            recordProtectedDay()
             tunThread = Thread(
                 { runTunLoop(input, output, generation) },
                 "shield-tun",
@@ -316,6 +319,26 @@ class ShieldVpnService : VpnService() {
             true
         }
         return ready == true
+    }
+
+    /**
+     * Marks today as a protected day, which is what the money-saved figure is
+     * derived from.
+     *
+     * Recorded only once the tun is actually established, not when the user taps
+     * start, so a failure to bring the VPN up cannot be counted as protection.
+     * The repository de-duplicates within a day, so a flapping connection cannot
+     * inflate anything. Failures are swallowed deliberately: the VPN is already
+     * running and must not be torn down because a progress metric could not be
+     * written.
+     */
+    private fun recordProtectedDay() {
+        scope.launch {
+            runCatching { recoveryRepository.recordProtectionActive(wallClock.nowEpochMillis()) }
+                .onFailure { error ->
+                    logger.w(Logs.VPN, "Could not record protected day", error)
+                }
+        }
     }
 
     /** Rebuilds the live FGS notification with throttled query/block counts. */

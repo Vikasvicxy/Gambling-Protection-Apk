@@ -22,6 +22,7 @@ import dev.gamblock.core.model.FortressWindow
 import dev.gamblock.core.model.RecoveryCurrency
 import dev.gamblock.core.model.RecoveryMetrics
 import dev.gamblock.core.model.RecoveryCalculator
+import dev.gamblock.core.model.RecoveryCoverage
 import dev.gamblock.core.model.WeekDay
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -115,16 +116,76 @@ class RecoveryRepository @Inject constructor(
     private val _fortress = MutableStateFlow(FortressSnapshot())
     val fortress: StateFlow<FortressSnapshot> = _fortress.asStateFlow()
 
+    private val _protectedEpochDays = MutableStateFlow<Set<Long>>(emptySet())
+
+    /**
+     * Days on which protection was observed running, as epoch-day numbers.
+     *
+     * Written by the VPN service, read here to keep the savings figure tied to
+     * real protection rather than to elapsed time. See `RecoveryCoverage`.
+     */
+    val protectedEpochDays: StateFlow<Set<Long>> = _protectedEpochDays.asStateFlow()
+
     private val clockTick = MutableStateFlow(0L)
 
-    val metrics: StateFlow<RecoveryMetrics> = combine(_profile, clockTick) { profile, _ ->
-        RecoveryCalculator.metrics(profile, wallClock.nowEpochMillis())
-    }.stateInScope(RecoveryMetrics())
+    val metrics: StateFlow<RecoveryMetrics> =
+        combine(_profile, clockTick, _protectedEpochDays) { profile, _, protectedDays ->
+            RecoveryCalculator.metrics(
+                profile = profile,
+                nowEpochMs = wallClock.nowEpochMillis(),
+                protectedEpochDays = protectedDays,
+            )
+        }.stateInScope(RecoveryMetrics())
+
+    /**
+     * Records that protection came up today. Safe to call repeatedly; a day is
+     * only ever marked once, so a flapping VPN cannot inflate the count.
+     */
+    suspend fun recordProtectionActive(nowEpochMs: Long = wallClock.nowEpochMillis()) {
+        val updated = RecoveryCoverage.mark(_protectedEpochDays.value, nowEpochMs)
+        if (updated == _protectedEpochDays.value) return
+        _protectedEpochDays.value = updated
+        val encoded = updated.joinToString(",")
+        runCatching {
+            dataStore.edit { it[KEY_PROTECTED_DAYS] = encoded }
+        }.onFailure { error ->
+            logger.w(Logs.DB, "Protected-day record failed", error)
+        }
+    }
+
+    private suspend fun observeProtectedDays() {
+        dataStore.data
+            .catch { emit(emptyPreferences()) }
+            .map { prefs -> decodeProtectedDays(prefs[KEY_PROTECTED_DAYS]) }
+            .collect { _protectedEpochDays.value = it }
+    }
+
+    /**
+     * Decodes the stored day list, discarding anything unparseable.
+     *
+     * A corrupt value degrades to "no coverage observed", which surfaces as a
+     * zero savings figure with `coverageKnown == false`. That is the safe
+     * direction to fail: the user is never shown a savings claim the data
+     * cannot support.
+     */
+    private fun decodeProtectedDays(raw: String?): Set<Long> {
+        if (raw.isNullOrBlank()) return emptySet()
+        val parsed = raw.split(',')
+            .mapNotNull { it.trim().toLongOrNull() }
+            .distinct()
+            .sorted()
+        return if (parsed.size > RecoveryCoverage.MAX_TRACKED_DAYS) {
+            parsed.takeLast(RecoveryCoverage.MAX_TRACKED_DAYS).toSet()
+        } else {
+            parsed.toSet()
+        }
+    }
 
     init {
         scope.launch { observeProfile() }
         scope.launch { observeJournal() }
         scope.launch { observeFortress() }
+        scope.launch { observeProtectedDays() }
         scope.launch { tickClock() }
     }
 
@@ -349,6 +410,7 @@ class RecoveryRepository @Inject constructor(
         private val KEY_RECOVERY_START = longPreferencesKey("recovery_start_epoch_ms")
         private val KEY_FORTRESS_ENABLED = booleanPreferencesKey("fortress_enabled")
         private val KEY_FORTRESS_WINDOWS = stringPreferencesKey("fortress_windows_json")
+private val KEY_PROTECTED_DAYS = stringPreferencesKey("recovery_protected_epoch_days")
         private const val MAX_JOURNAL_ENTRIES = 500
         private const val MAX_NOTE_LENGTH = 280
         private const val MAX_DOMAIN_LENGTH = 253
