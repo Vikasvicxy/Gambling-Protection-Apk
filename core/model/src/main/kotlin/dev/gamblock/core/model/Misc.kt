@@ -14,6 +14,10 @@ data class VpnRuntimeState(
     val exceptionsApplied: Long = 0L,
     /** QUIC / HTTP-3 UDP 443 packets silently dropped to force TCP fallback. */
     val quicDrops: Long = 0L,
+    /** AAAA queries answered with an empty NOERROR to force IPv4. */
+    val ipv6Suppressed: Long = 0L,
+    /** Queries recognised as going to a search engine we can offer SafeSearch for. */
+    val searchEngineQueries: Long = 0L,
     val failure: VpnFailure? = null,
     /** True when the VPN service was explicitly stopped by the user request. */
     val userStopped: Boolean = false,

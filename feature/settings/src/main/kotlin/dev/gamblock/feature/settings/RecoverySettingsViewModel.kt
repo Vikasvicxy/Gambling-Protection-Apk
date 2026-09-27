@@ -54,6 +54,8 @@ data class RecoverySettingsUiState(
     val guardianPinEnabled: Boolean = false,
     val guardianPinState: GuardianPinUnlockState = GuardianPinUnlockState.NotConfigured,
     val quicDrops: Long = 0L,
+    val ipv6Suppressed: Long = 0L,
+    val searchEngineQueries: Long = 0L,
     val excludedPackages: Set<String> = emptySet(),
     val installableApps: List<InstalledAppCandidate> = emptyList(),
     val statusMessage: String? = null,
@@ -175,7 +177,9 @@ class RecoverySettingsViewModel @Inject constructor(
             guardianPinConfigured = pinConfigured,
             guardianPinEnabled = settings.guardianPinEnabled,
             guardianPinState = pinState,
-            quicDrops = vpn.quicDrops,
+              quicDrops = vpn.quicDrops,
+              ipv6Suppressed = vpn.ipv6Suppressed,
+              searchEngineQueries = vpn.searchEngineQueries,
             statusMessage = status,
             reportFile = file,
             reportBusy = busy,
@@ -310,6 +314,14 @@ class RecoverySettingsViewModel @Inject constructor(
             appExclusionRepository.clear()
             _status.value = "All app exemptions removed."
         }
+    }
+
+    fun setIpv6LeakProtectionEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setIpv6LeakProtectionEnabled(enabled) }
+    }
+
+    fun setSafeSearchAssistEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setSafeSearchAssistEnabled(enabled) }
     }
 
     /** Turning DoH/DoQ blocking off weakens the DNS shield, so it is gated. */

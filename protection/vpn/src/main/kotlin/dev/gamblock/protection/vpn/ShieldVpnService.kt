@@ -22,6 +22,9 @@ import dev.gamblock.core.common.dispatcher.DispatchersProvider
 import dev.gamblock.core.common.logging.Logs
 import dev.gamblock.core.common.logging.ShieldLogger
 import dev.gamblock.core.model.DecisionKind
+import dev.gamblock.core.model.Ipv6LeakPolicy
+import dev.gamblock.core.model.SafeSearchPolicy
+import dev.gamblock.core.model.SearchEngineMatch
 import dev.gamblock.core.model.VpnRuntimeState
 import dev.gamblock.data.preferences.AppExclusionRepository
 import dev.gamblock.data.preferences.SettingsRepository
@@ -473,6 +476,36 @@ class ShieldVpnService : VpnService() {
             stateStore.recordExceptionApplied()
             logger.d(Logs.VPN, "EXCEPTION ${question.name} (custom allowlist)")
         }
+
+        val settings = settingsRepository.settings.value
+
+        // IPv6 leak suppression, after the block decision so a blocked name
+        // still gets the stronger NXDOMAIN. Applied to every allowed domain
+        // rather than only blocked ones: we forward no packets, so handing a
+        // client an AAAA it could have used would just black-hole the tunnel.
+        if (Ipv6LeakPolicy.shouldSuppress(question.type, settings.ipv6LeakProtectionEnabled)) {
+            stateStore.recordIpv6Suppressed()
+            if (isCurrentRun(generation)) {
+                writeResponse(udp, DnsResponseFactory.emptyNoError(query), output)
+            }
+            logger.d(Logs.DNS, "AAAA suppressed for ${question.name}; forcing IPv4")
+            return
+        }
+
+        // Search-engine recognition. This deliberately does not rewrite the
+        // answer: substituting the SafeSearch address cannot change what a TLS
+        // client sees, because the client still sends the original hostname in
+        // SNI. See SafeSearchPolicy before "fixing" this into a rewrite.
+        if (settings.safeSearchAssistEnabled) {
+            when (val match = SafeSearchPolicy.classify(question.name)) {
+                is SearchEngineMatch.Engine -> {
+                    stateStore.recordSearchEngineQuery()
+                    logger.i(Logs.DNS, "search engine detected: ${match.engine.displayName}")
+                }
+                is SearchEngineMatch.AlreadySafe, SearchEngineMatch.NotSearch -> Unit
+            }
+        }
+
         val answer = forwardQuery(query, generation)
         if (!isCurrentRun(generation)) return
         val response = answer ?: DnsResponseFactory.refused(query)

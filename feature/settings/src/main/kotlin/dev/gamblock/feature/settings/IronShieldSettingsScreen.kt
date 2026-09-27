@@ -162,6 +162,41 @@ fun IronShieldSettingsRoute(
                     expanded = defenseOpen,
                     onToggleExpanded = {},
                 )
+                FeatureToggleCard(
+                    definition = FeatureToggleDefinition(
+                        key = "ipv6_leak",
+                        title = "Close the IPv6 Hole",
+                        whatItDoes = "Answers every IPv6 (AAAA) lookup with an empty reply, so your phone falls back to IPv4 where Shield is actually watching. Without this, a device on native IPv6 reaches blocked sites without passing through the filter at all.",
+                        whyItHelps = "An unfiltered connection that looks filtered is worse than a visible gap. Closing it means every lookup either goes through Shield or fails honestly.",
+                        enabled = state.settings.ipv6LeakProtectionEnabled,
+                        onToggle = viewModel::setIpv6LeakProtectionEnabled,
+                    ),
+                    expanded = defenseOpen,
+                    onToggleExpanded = {},
+                )
+                FeatureToggleCard(
+                    definition = FeatureToggleDefinition(
+                        key = "safesearch",
+                        title = "Offer Safe Search on Search Engines",
+                        whatItDoes = "Notices when you look something up on Google, Bing or DuckDuckGo and offers that engine's own Safe Search page in one tap.",
+                        whyItHelps = "Gambling ads and casino results ride in on ordinary searches. Shield cannot force Safe Search for you: over an encrypted connection the search engine still sees the address you typed, so only the engine's own Safe Search setting genuinely filters. Shield points you at it rather than pretending otherwise.",
+                        enabled = state.settings.safeSearchAssistEnabled,
+                        onToggle = viewModel::setSafeSearchAssistEnabled,
+                    ),
+                    expanded = defenseOpen,
+                    onToggleExpanded = {},
+                )
+                ShieldText(
+                    text = "IPv6 lookups answered: ${state.ipv6Suppressed} · search queries noticed: ${state.searchEngineQueries}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                ShieldText(
+                    text = "Encrypted DNS (DoH) and QUIC still bypass any DNS-level filter, including " +
+                        "this one. Turn on Private DNS detection below to see when that is happening.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 ShieldText(
                     text = "Encrypted-bypass packets stopped: ${state.quicDrops}",
                     style = MaterialTheme.typography.bodySmall,

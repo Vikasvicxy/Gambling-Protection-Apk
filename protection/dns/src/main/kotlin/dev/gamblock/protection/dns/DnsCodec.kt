@@ -141,6 +141,26 @@ object DnsResponseFactory {
         return base + question
     }
 
+    /**
+     * Builds a NOERROR response carrying zero answers, echoing the question.
+     *
+     * This is the "successful but empty" answer, and it is the correct way to
+     * suppress a record type. NXDOMAIN would assert the name does not exist,
+     * which is a lie that can also poison a client's cache for the other record
+     * type in the same lookup. A client receiving this for AAAA immediately
+     * retries over IPv4 instead of waiting for a timeout, which is what keeps
+     * IPv6 suppression from looking like a hang to the user.
+     */
+    fun emptyNoError(query: ByteArray): ByteArray {
+        val id = DnsParser.headerId(query)
+        val qd = DnsParser.questionCount(query).coerceAtMost(1)
+        val base = header(id, DnsConstants.FLAG_QR or DnsConstants.RCODE_OK, qd, 0, 0, 0)
+        if (qd == 0) return base
+        val questionLength = questionBytes(query) ?: return base
+        val question = query.copyOfRange(12, 12 + questionLength)
+        return base + question
+    }
+
     private fun questionBytes(query: ByteArray): Int? {
         var pos = 12
         var iterations = 0

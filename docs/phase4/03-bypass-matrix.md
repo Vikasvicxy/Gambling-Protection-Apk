@@ -7,7 +7,7 @@
 | 8.1 | Change DNS to Google (8.8.8.8) / Cloudflare manually | VPN intercepts all DNS before the network stack → still blocked | DEFAULT — VPN-level DNS; TESTED by design (tun routing) | ☐ |
 | 8.2 | Private browsing / incognito | System DNS unchanged → blocked | TESTED by design (VPN-level) | ☐ |
 | 8.3 | DoH (firefox.network.trr)/DoT/QUIC | Bypasses DNS-only VPN: encrypted + inline QUIC resolves without intercept | **HONEST LIMIT** — see `10-known-limitations.md`; mitigation = block via DNS-level redirection if upstream blocked domains are also DoH hosts, else out of scope | ☐ |
-| 8.4 | IPv6 DNS (AAAA / RDNSS) | Not filtered (IPv4-only tun); devices with IPv6-enabled resolvers can bypass | **HONEST LIMIT** } | ☐ |
+| 8.4 | IPv6 DNS (AAAA / RDNSS) | **CLOSED for AAAA.** AAAA queries are answered with an empty NOERROR so the client falls back to IPv4, where Shield is in the path. No `2000::/3` route is added: the tun forwards no packets, so routing IPv6 into it would black-hole IPv6. Residual: a hard-coded IPv6 literal, or AAAA handed back by a DoH resolver, falls under 8.3. | TESTED - `Ipv6LeakPolicyTest`, `DnsEmptyNoErrorTest`; device run pending | ? |
 | 8.5 | System-level Hosts file | Ignored under VPN (VpnService wins) | TESTED by design | ☐ |
 | 8.6 | Proxy / SOCKS app (e.g. Psiphon) | Proxy still needs DNS resolution → blocked unless proxy resolves via bypass channel | DEFAULT | ☐ |
 | 8.7 | DNS-client in a separate app/process using raw UDP to a public resolver IP | IP packet to the resolver is still routed through tun → dropped for blocked domains; allowed domains forwarded | TESTED by design | ☐ |
@@ -20,7 +20,9 @@
 
 | 8.14 | **User exempts an app from DNS filtering** (per-app split tunneling, added after phase 4) | The exempted app's DNS never reaches Shield, so any blocked domain is reachable from inside it. Deliberate, user-initiated, and stated in the UI as a reduction in protection. Shield's own package can never be exempted. | TESTED by design - `AppExclusionFilter` + `AppExclusionApplierPlanTest`; the platform `addDisallowedApplication` call itself still needs a device run | ? |
 
+| 8.15 | Safe Search on search engines (added after phase 4) | Not a bypass: Shield cannot force Safe Search at DNS level, because over TLS the client still sends the original hostname in SNI and the engine returns unfiltered results. Shield recognises the engine and offers its own SafeSearch endpoint instead. The UI says "offers", not "enforces". | TESTED by design - `SafeSearchPolicyTest` | ? |
+
 ## Summary
 - Enforcement core (DNS-level, tun-based) resisted bypasses 8.1–8.2, 8.5–8.8, 8.10–8.11 by architecture and unit tests.
-- Honest limitations 8.3 (DoH/DoT/QUIC) and 8.4 (IPv6): the release notes + known-limitations document must disclose that encrypted/alternate-protocol DNS can bypass a DNS-only VPN. No false "100% protection" claim.
+- Honest limitations 8.3 (DoH/DoT/QUIC) and 8.14 (user-chosen per-app exemption): the release notes + known-limitations document must disclose that encrypted/alternate-protocol DNS can bypass a DNS-only VPN, and that exempting an app removes DNS filtering for it. No false "100% protection" claim. 8.4 (IPv6) is no longer in this list: AAAA suppression closes it.
 - 8.14 is a **self-selected** exposure rather than an attacker-controlled one: exempting an app is the user trading protection for compatibility with a bank or a corporate VPN. It is only as safe as the choice, so the UI names the trade-off, the picker says the list is incomplete, and the list is capped and validated before it reaches the platform.

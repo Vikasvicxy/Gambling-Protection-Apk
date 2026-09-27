@@ -47,6 +47,19 @@ data class SettingsState(
     val blockEncryptedBrowsers: Boolean = true,
     val privateDnsAlertEnabled: Boolean = true,
     val urgeSurferHaptics: Boolean = true,
+    /**
+     * Answer AAAA queries with an empty NOERROR so clients fall back to IPv4,
+     * where Shield is actually in the path. Without this, a device with native
+     * IPv6 reaches blocked domains around the tun entirely (bypass matrix 8.4).
+     * On by default because the failure mode is silent.
+     */
+    val ipv6LeakProtectionEnabled: Boolean = true,
+    /**
+     * Recognise search-engine queries and offer that engine's SafeSearch
+     * endpoint. Deliberately *not* called "enforcement": DNS-level forcing does
+     * not work under TLS. See SafeSearchPolicy for the full reasoning.
+     */
+    val safeSearchAssistEnabled: Boolean = false,
 )
 
 @Singleton
@@ -129,6 +142,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setPrivateDnsAlertEnabled(enabled: Boolean) = update { it.copy(privateDnsAlertEnabled = enabled) }
 
     suspend fun setUrgeSurferHaptics(enabled: Boolean) = update { it.copy(urgeSurferHaptics = enabled) }
+
+    suspend fun setIpv6LeakProtectionEnabled(enabled: Boolean) =
+        update { it.copy(ipv6LeakProtectionEnabled = enabled) }
+
+    suspend fun setSafeSearchAssistEnabled(enabled: Boolean) =
+        update { it.copy(safeSearchAssistEnabled = enabled) }
 
     companion object {
         private val SETTINGS_JSON = stringPreferencesKey("settings_json")

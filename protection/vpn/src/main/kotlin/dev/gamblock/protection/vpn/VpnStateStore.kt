@@ -61,6 +61,17 @@ class VpnStateStore @Inject constructor() {
         _state.value = prev.copy(quicDrops = prev.quicDrops + 1)
     }
 
+    /** AAAA answered with an empty NOERROR, so the client retries over IPv4. */
+    fun recordIpv6Suppressed() {
+        val prev = _state.value
+        _state.value = prev.copy(ipv6Suppressed = prev.ipv6Suppressed + 1)
+    }
+
+    fun recordSearchEngineQuery() {
+        val prev = _state.value
+        _state.value = prev.copy(searchEngineQueries = prev.searchEngineQueries + 1)
+    }
+
     fun resetCounters() {
         _state.value = _state.value.copy(
             queriesHandled = 0L,
@@ -68,6 +79,8 @@ class VpnStateStore @Inject constructor() {
             queriesAllowed = 0L,
             exceptionsApplied = 0L,
             quicDrops = 0L,
+            ipv6Suppressed = 0L,
+            searchEngineQueries = 0L,
         )
     }
 }
