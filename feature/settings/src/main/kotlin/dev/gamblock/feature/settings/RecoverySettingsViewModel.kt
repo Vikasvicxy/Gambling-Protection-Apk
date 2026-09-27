@@ -8,16 +8,19 @@ import dev.gamblock.core.model.CravingTrigger
 import dev.gamblock.core.model.FinancialProfile
 import dev.gamblock.core.model.FortressStatus
 import dev.gamblock.core.model.FortressWindow
+import dev.gamblock.core.model.InstalledAppCandidate
 import dev.gamblock.core.model.RecoveryCurrency
 import dev.gamblock.core.model.RecoveryMetrics
 import dev.gamblock.data.backup.PreparedRestore
 import dev.gamblock.data.backup.RecoveryBackupRepository
+import dev.gamblock.data.preferences.AppExclusionRepository
 import dev.gamblock.data.preferences.CravingInsightsSnapshot
 import dev.gamblock.data.preferences.GuardianPinRepository
 import dev.gamblock.data.preferences.GuardianPinUnlockState
 import dev.gamblock.data.preferences.RecoveryRepository
 import dev.gamblock.data.preferences.SettingsRepository
 import dev.gamblock.data.preferences.SettingsState
+import dev.gamblock.core.common.dispatcher.DispatchersProvider
 import dev.gamblock.data.repository.ProtectionActionResult
 import dev.gamblock.data.repository.ProtectionCommandCoordinator
 import dev.gamblock.data.repository.ProtectionGateHolder
@@ -51,6 +54,8 @@ data class RecoverySettingsUiState(
     val guardianPinEnabled: Boolean = false,
     val guardianPinState: GuardianPinUnlockState = GuardianPinUnlockState.NotConfigured,
     val quicDrops: Long = 0L,
+    val excludedPackages: Set<String> = emptySet(),
+    val installableApps: List<InstalledAppCandidate> = emptyList(),
     val statusMessage: String? = null,
     val reportFile: File? = null,
     val reportBusy: Boolean = false,
@@ -87,9 +92,13 @@ class RecoverySettingsViewModel @Inject constructor(
     private val privateDnsWatchdog: PrivateDnsWatchdog,
     private val vpnStateStore: VpnStateStore,
     private val backupRepository: RecoveryBackupRepository,
+    private val appExclusionRepository: AppExclusionRepository,
+    private val installedAppsProvider: InstalledAppsProvider,
+    private val dispatchers: DispatchersProvider,
 ) : ViewModel() {
 
     private val _status = MutableStateFlow<String?>(null)
+    private val _installableApps = MutableStateFlow<List<InstalledAppCandidate>>(emptyList())
     private val _report = MutableStateFlow<File?>(null)
     private val _reportBusy = MutableStateFlow(false)
     private val _backupBusy = MutableStateFlow(false)
@@ -114,6 +123,10 @@ class RecoverySettingsViewModel @Inject constructor(
 
     private val reportState = combine(_report, _reportBusy) { file, busy -> file to busy }
     private val backupState = combine(_backupBusy, _pendingRestore) { busy, pending -> busy to pending }
+    private val exclusionState =
+        combine(appExclusionRepository.state, _installableApps) { state, apps ->
+            state.excludedPackages to apps
+        }
 
     private val baseState = combine(
         settingsRepository.settings,
@@ -126,8 +139,9 @@ class RecoverySettingsViewModel @Inject constructor(
         vpnStateStore.state,
         _status,
         reportState,
-        backupState,
-    ) {         values: Array<Any?> ->
+            backupState,
+            exclusionState,
+        ) {         values: Array<Any?> ->
         val settings = values[0] as SettingsState
         val metrics = values[1] as RecoveryMetrics
         val profile = values[2] as FinancialProfile
@@ -138,13 +152,16 @@ class RecoverySettingsViewModel @Inject constructor(
         val vpn = values[7] as dev.gamblock.core.model.VpnRuntimeState
         val status = values[8] as String?
         val report = values[9] as Pair<File?, Boolean>
-        val backup = values[10] as Pair<Boolean, PreparedRestore?>
+            val backup = values[10] as Pair<Boolean, PreparedRestore?>
+            val exclusion = values[11] as Pair<Set<String>, List<InstalledAppCandidate>>
         val file = report.first
         val busy = report.second
         RecoverySettingsUiState(
-            settings = settings,
-            metrics = metrics,
-            profile = profile,
+                settings = settings,
+                metrics = metrics,
+                profile = profile,
+                excludedPackages = exclusion.first,
+                installableApps = exclusion.second,
             fortress = FortressStatus(
                 lockedDown = fortress.lockedDown,
                 activeWindow = fortress.windows.firstOrNull { it.label == fortress.activeWindowLabel },
@@ -243,6 +260,55 @@ class RecoverySettingsViewModel @Inject constructor(
                 settingsRepository.setFortressModeEnabled(false)
                 _status.value = "Fortress mode off"
             }
+        }
+    }
+
+    /**
+     * Loads the apps the platform will let us see.
+     *
+     * Called when the exemption section opens rather than at construction: the
+     * query can touch a few hundred packages, and there is no reason to pay for
+     * it on every settings visit.
+     */
+    fun refreshInstallableApps() {
+        viewModelScope.launch {
+            _installableApps.value = runCatching {
+                installedAppsProvider.candidates(dispatchers.io)
+            }.getOrElse {
+                _status.value = "Could not read the installed app list."
+                emptyList()
+            }
+        }
+    }
+
+    fun toggleAppExclusion(packageName: String) {
+        viewModelScope.launch {
+            val current = appExclusionRepository.excludedPackages
+            appExclusionRepository.toggle(packageName, packageName !in current)
+        }
+    }
+
+    /** Adds a package the user typed by hand, validating before it is stored. */
+    fun addExclusionByPackageName(packageName: String) {
+        viewModelScope.launch {
+            val trimmed = packageName.trim()
+            if (!dev.gamblock.core.model.AppExclusionFilter.isValidPackageName(trimmed)) {
+                _status.value = "\"$trimmed\" is not a valid Android package name."
+                return@launch
+            }
+            appExclusionRepository.add(trimmed)
+            _status.value = if (trimmed in appExclusionRepository.excludedPackages) {
+                "$trimmed now bypasses DNS filtering."
+            } else {
+                "$trimmed could not be stored."
+            }
+        }
+    }
+
+    fun clearAllExclusions() {
+        viewModelScope.launch {
+            appExclusionRepository.clear()
+            _status.value = "All app exemptions removed."
         }
     }
 

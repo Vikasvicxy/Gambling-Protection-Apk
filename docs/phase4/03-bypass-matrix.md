@@ -18,6 +18,9 @@
 | 8.12 | Exfiltrate blocked-site DNS queries via a second UDP socket to a nonstandard port | Only 10.147.2.1:53 is the block resolver; arbitrary UDP to external IP is not proxied to a block answer — but VPN DNS is the *only* resolver path for permitted flows; queries to an arbitrary hard-coded IP resolve via... | NOT TESTED on device; requires device run | ☐ |
 | 8.13 | Alternate TLD / IDN trick (admarketing.xyz vs similar) | Blocklist matches by exact rule set; IDN/punycode variants in blocklist are applied by normalization; weak-by-design if blocklist lacks the variant | PARTIALLY TESTED | ☐ |
 
+| 8.14 | **User exempts an app from DNS filtering** (per-app split tunneling, added after phase 4) | The exempted app's DNS never reaches Shield, so any blocked domain is reachable from inside it. Deliberate, user-initiated, and stated in the UI as a reduction in protection. Shield's own package can never be exempted. | TESTED by design - `AppExclusionFilter` + `AppExclusionApplierPlanTest`; the platform `addDisallowedApplication` call itself still needs a device run | ? |
+
 ## Summary
 - Enforcement core (DNS-level, tun-based) resisted bypasses 8.1–8.2, 8.5–8.8, 8.10–8.11 by architecture and unit tests.
 - Honest limitations 8.3 (DoH/DoT/QUIC) and 8.4 (IPv6): the release notes + known-limitations document must disclose that encrypted/alternate-protocol DNS can bypass a DNS-only VPN. No false "100% protection" claim.
+- 8.14 is a **self-selected** exposure rather than an attacker-controlled one: exempting an app is the user trading protection for compatibility with a bank or a corporate VPN. It is only as safe as the choice, so the UI names the trade-off, the picker says the list is incomplete, and the list is capped and validated before it reaches the platform.

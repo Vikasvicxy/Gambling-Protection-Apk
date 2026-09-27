@@ -23,6 +23,7 @@ import dev.gamblock.core.common.logging.Logs
 import dev.gamblock.core.common.logging.ShieldLogger
 import dev.gamblock.core.model.DecisionKind
 import dev.gamblock.core.model.VpnRuntimeState
+import dev.gamblock.data.preferences.AppExclusionRepository
 import dev.gamblock.data.preferences.SettingsRepository
 import dev.gamblock.protection.domainengine.DomainBlocker
 import dev.gamblock.protection.dns.DnsParser
@@ -50,6 +51,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -75,6 +79,8 @@ class ShieldVpnService : VpnService() {
     @Inject lateinit var upstreamProvider: DnsUpstreamProvider
     @Inject lateinit var recorder: BlockEventRecorder
     @Inject lateinit var notificationManager: VpnNotificationManager
+    @Inject lateinit var appExclusionApplier: AppExclusionApplier
+    @Inject lateinit var appExclusionRepository: AppExclusionRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val lifecycleLock = Any()
@@ -97,6 +103,12 @@ class ShieldVpnService : VpnService() {
     private val networkGeneration = AtomicLong(0)
     private var networkCallbackRegistered = false
 
+    /** Exemptions baked into the currently established tunnel. */
+    @Volatile
+    private var lastAppliedExclusions: Set<String> = emptySet()
+
+    private var exclusionWatcherJob: Job? = null
+
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) = handleNetworkChange()
 
@@ -117,6 +129,33 @@ class ShieldVpnService : VpnService() {
         super.onCreate()
         registerNetworkCallback()
         startVpnForeground()
+        startExclusionWatcher()
+    }
+
+    /**
+     * Re-establishes the tunnel when the exemption list changes.
+     *
+     * The platform applies disallowed applications at setup time only, so
+     * without this the user would toggle a bank off, see the list update, and
+     * carry on with the old tunnel still routing its DNS. Re-establishing
+     * drops in-flight connections for a moment, which is the honest cost of the
+     * change and the reason the UI warns before saving.
+     */
+    private fun startExclusionWatcher() {
+        exclusionWatcherJob?.cancel()
+        exclusionWatcherJob = scope.launch {
+            appExclusionRepository.state
+                .map { it.excludedPackages }
+                .distinctUntilChanged()
+                .drop(1) // the first emission matches whatever establish() already applied
+                .collect { packages ->
+                    if (packages == lastAppliedExclusions) return@collect
+                    if (!running) return@collect
+                    logger.i(Logs.VPN, "exemption list changed; re-establishing tunnel")
+                    shutdown()
+                    startEstablish()
+                }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -137,6 +176,8 @@ class ShieldVpnService : VpnService() {
             starting = false
         }
         unregisterNetworkCallback()
+        exclusionWatcherJob?.cancel()
+        exclusionWatcherJob = null
         shutdown()
         scope.cancel()
         packetExecutor.shutdownNow()
@@ -189,6 +230,13 @@ class ShieldVpnService : VpnService() {
             .addAddress(VpnConfig.TUN_ADDR, VpnConfig.TUN_ADDR_PREFIX)
             .addRoute(VpnConfig.TUN_ADDR, VpnConfig.TUN_ADDR_PREFIX)
             .addDnsServer(VpnConfig.TUN_ADDR)
+
+        // Split tunnelling must be declared before establish(): the platform
+        // freezes the exemption list when the tunnel comes up, so anything added
+        // afterwards is silently ignored until the next setup.
+        val exclusionPlan = appExclusionApplier.currentPlan()
+        lastAppliedExclusions = exclusionPlan.applied.toSet()
+        appExclusionApplier.applyTo(builder, exclusionPlan)
 
         val established = try {
             builder.establish()

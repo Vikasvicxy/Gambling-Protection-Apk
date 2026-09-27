@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -173,6 +174,18 @@ fun IronShieldSettingsRoute(
                         color = ShieldPalette.Orange,
                     )
                 }
+                // Loaded on demand: enumerating packages is not free, and the
+                // user may never open this part of the settings.
+                LaunchedEffect(defenseOpen) {
+                    if (defenseOpen) viewModel.refreshInstallableApps()
+                }
+                AppExclusionEditor(
+                    candidates = state.installableApps,
+                    excludedPackages = state.excludedPackages,
+                    onToggle = viewModel::toggleAppExclusion,
+                    onManualAdd = viewModel::addExclusionByPackageName,
+                    onRemoveAll = viewModel::clearAllExclusions,
+                )
             }
 
             SettingsCategoryCard(

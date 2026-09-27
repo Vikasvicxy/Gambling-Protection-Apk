@@ -15,6 +15,63 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
+        Package visibility for per-app DNS exemptions.
+
+        Android 11 (API 30) hides most installed packages by default, so
+        getInstalledPackages() returns only a filtered set and
+        getPackageInfo() returns NameNotFoundException for anything undeclared.
+        Without this, the "bypass protection for selected apps" picker would be
+        empty and addDisallowedApplication() would fail for real banking apps.
+
+        Declaring <queries> for the known catalog is deliberate and is the
+        Play-safe choice. The alternative is
+        android.permission.QUERY_ALL_PACKAGES, which Google Play restricts to a
+        short list of accepted uses and which requires a written declaration in
+        Play Console; shipping it unapproved risks removal. A <queries> element
+        needs no runtime permission and no declaration.
+
+        Trade-off, stated plainly: the picker sees these catalog packages plus
+        whatever else the platform volunteers, so it is NOT a complete list of
+        installed apps. Users whose bank is absent can still add it by package
+        name through the manual-entry field, which is why that field exists.
+
+        Keep this list in sync with ExcludedAppsCatalog.SUGGESTIONS in
+        :core:model.
+    -->
+    <queries>
+        <package android:name="com.google.android.apps.nbu.paisa.user" />
+        <package android:name="com.phonepe.app" />
+        <package android:name="in.org.npci.upiapp" />
+        <package android:name="in.amazon.mShop.android.shopping" />
+        <package android:name="com.paytm.pktv" />
+        <package android:name="com.one.android.paisauser" />
+        <package android:name="com.dreamplug.androidapp" />
+        <package android:name="com.hdfc.hdfcbank" />
+        <package android:name="com.icicibank.mobile" />
+        <package android:name="com.axis.mobile" />
+        <package android:name="com.sbi.sbiinone" />
+        <package android:name="com.kotak.KotakMobileBanking" />
+        <package android:name="com.bob.mobilebanking" />
+        <package android:name="in.org.npci.bhimpkg" />
+        <package android:name="com.yesbank.yescitibank" />
+        <package android:name="com.paypal.android.p2pmobile" />
+        <package android:name="com.squareup.cash" />
+        <package android:name="com.revolut.revolut" />
+        <package android:name="com.monzo.monzo.android" />
+        <package android:name="com.transferwise.android" />
+        <package android:name="com.zelle.android.zelle" />
+        <package android:name="com.onedebit.chime" />
+        <package android:name="com.microsoft.teams" />
+        <package android:name="com.Slack" />
+        <package android:name="us.zoom.videomeetings" />
+        <package android:name="com.cisco.anyconnect.vpn.android.avf" />
+        <package android:name="com.paloaltonetworks.globalprotect" />
+        <package android:name="com.cloudflare.onedotonedotonedot" />
+        <package android:name="com.nordvpn.android" />
+        <package android:name="com.expressvpn.android" />
+    </queries>
+
+    <!--
         Required to fetch the signed threat-intelligence feed and the DoH/DoQ
         blocklist. The VPN tunnel itself is not "network access" on the public
         internet, but the sync and blocklist download are, so this cannot be
