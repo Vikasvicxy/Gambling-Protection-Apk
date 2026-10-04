@@ -108,6 +108,61 @@ class ParentAuthorizationTest {
     }
 
     @Test
+    fun `parent mismatch is reported before the child mismatch`() {
+        // Both identifiers are wrong. The parent check must run first, so the caller is
+        // identified as unauthorized before any child device is considered.
+        val result = authz.authorize(
+            parentAccountId = "ff".repeat(16),
+            persistedParentAccountId = parentId,
+            childDeviceId = unrelatedChild,
+            persistedChildDeviceId = childId,
+        )
+        assertThat((result as ParentAuthorization.Result.Denied).reason)
+            .isEqualTo("parent account mismatch")
+    }
+
+    @Test
+    fun `unrelated child denial names the reason`() {
+        val result = authz.authorize(
+            parentAccountId = parentId,
+            persistedParentAccountId = parentId,
+            childDeviceId = unrelatedChild,
+            persistedChildDeviceId = childId,
+        )
+        assertThat((result as ParentAuthorization.Result.Denied).reason)
+            .isEqualTo("attempt to access unrelated child device")
+    }
+
+    @Test
+    fun `grant carries no protection state until the device reports it`() {
+        val result = authz.authorize(
+            parentAccountId = parentId,
+            persistedParentAccountId = parentId,
+            childDeviceId = childId,
+            persistedChildDeviceId = childId,
+        )
+        val device = (result as ParentAuthorization.Result.Granted).supervisedDevice
+        assertThat(device.childDeviceId).isEqualTo(childId)
+        assertThat(device.protectionActive).isFalse()
+        assertThat(device.todayBlockedCount).isEqualTo(0)
+        assertThat(device.lastCheckInEpochMs).isNull()
+    }
+
+    @Test
+    fun `two parents linked to the same child are both granted their own session`() {
+        val otherParent = "dd".repeat(16)
+        listOf(parentId, otherParent).forEach { parent ->
+            val result = authz.authorize(
+                parentAccountId = parent,
+                persistedParentAccountId = parent,
+                childDeviceId = childId,
+                persistedChildDeviceId = childId,
+            )
+            assertThat(result).isInstanceOf(ParentAuthorization.Result.Granted::class.java)
+        }
+    }
+
+    @Test
     fun `config changes require approval only for verified linkage`() {
         val config = dev.gamblock.core.model.ParentModeConfig(
             parentAccountId = parentId,
