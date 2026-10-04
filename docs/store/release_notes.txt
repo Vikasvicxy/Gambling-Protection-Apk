@@ -1,11 +1,10 @@
-Shield v1.1.0
+Shield v1.2.0
 
-NEW
-- Exempt a banking or work app that will not run inside another VPN; all else stays filtered.
-- IPv6 protection closes a gap where IPv6 devices could bypass filtering.
-- App risk scan: offline scan of installed apps for betting/casino wording. Advisory only.
-- One-tap Safe Search assistance.
+STEADIER ON BAD NETWORKS
+- Blocklist updates now retry across three CDNs, and keep the last known-good list if every origin fails. Blocking never stops while offline.
+- DNS is briefly held during a network change instead of failing while the new route settles.
 
-MORE HONEST
-- Money saved counts only days Shield ran, with coverage shown. Unprotected days earn nothing.
-- Safe Search is offered, not enforced: only the engine's own setting filters.
+BATTERY
+- One tap opens your vendor's autostart screen (MIUI, Oppo, Vivo, Huawei, Samsung and more) so the VPN is not killed in the background.
+
+No account, no telemetry, no installed-app uploads.
