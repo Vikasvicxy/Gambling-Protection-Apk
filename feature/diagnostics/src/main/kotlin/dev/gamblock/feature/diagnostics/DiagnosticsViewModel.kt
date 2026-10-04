@@ -18,6 +18,7 @@ import dev.gamblock.core.model.OemInfo
 import dev.gamblock.core.model.VpnConflictInfo
 import dev.gamblock.data.preferences.ReviewerModeRepository
 import dev.gamblock.protection.health.HealthEngine
+import dev.gamblock.protection.oem.OemAutostartResolver
 import dev.gamblock.protection.oem.OemInfoRepository
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +55,7 @@ class DiagnosticsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val healthEngine: HealthEngine,
     private val oemInfoRepository: OemInfoRepository,
+    private val oemAutostartResolver: OemAutostartResolver,
     private val reviewerModeRepository: ReviewerModeRepository,
     private val logger: ShieldLogger,
 ) : ViewModel() {
@@ -106,7 +108,9 @@ class DiagnosticsViewModel @Inject constructor(
 
     private fun fixIntent(component: HealthComponent): Intent? = when (component) {
         HealthComponent.VPN -> context.packageManager.getLaunchIntentForPackage(context.packageName)
-        HealthComponent.BATTERY -> Intent(
+        HealthComponent.BATTERY -> oemAutostartResolver.bestAutostartTarget()?.let { target ->
+            Intent().setComponent(android.content.ComponentName(target.packageName, target.className))
+        } ?: Intent(
             Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
         ).setData(android.net.Uri.parse("package:${context.packageName}"))
         HealthComponent.PERMISSION -> Intent(ACTION_APP_NOTIFICATION_SETTINGS)
