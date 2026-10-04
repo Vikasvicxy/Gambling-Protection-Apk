@@ -1,9 +1,23 @@
 name: Blocklist Release
 
 on:
-  schedule:
-    # Every 12 hours: canary builds for continuous testing.
-    - cron: "0 3,15 * * *"
+  # ---------------------------------------------------------------------------
+  # MANUAL DISPATCH ONLY.
+  #
+  # This workflow previously ran on `cron: "0 3,15 * * *"` - twice a day, every
+  # day, indefinitely. That produced a steady stream of failing runs and the
+  # failure emails that come with them, for a job whose output only changes when
+  # a human changes the blocklist sources. A scheduled canary is the wrong tool
+  # here: there is nothing to canary until something upstream moves.
+  #
+  # To run it: Actions > Blocklist Release > Run workflow, pick a channel.
+  # To re-enable scheduling later, add back:
+  #
+  #   schedule:
+  #     - cron: "0 4 * * 1"   # Mondays only, not twice a day
+  #
+  # and restore the `github.event_name == 'schedule'` clause in the canary `if`.
+  # ---------------------------------------------------------------------------
   workflow_dispatch:
     inputs:
       channel:
@@ -28,13 +42,12 @@ concurrency:
 
 jobs:
   # -----------------------------------------------------------------------
-  # Canary release: automatic, dev signing key, no approval gate.
+  # Canary release: dev signing key, no approval gate. Manual dispatch only.
   # -----------------------------------------------------------------------
   canary:
-    if: >
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.channel == 'canary')
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.channel == 'canary'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,11 +61,19 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Write production signing key
+      - name: Write development signing key
         run: |
           mkdir -p local
-          echo "${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}" > local/dev-signing-private-key.pem
-          chmod 600 local/dev-signing-private-key.pem
+          # A canary is signed with the development key so it never touches the
+          # production signing material. If the secret is absent the build is
+          # allowed to continue and will fail its own signature check, which is
+          # a clearer failure than a shell error on an unset variable.
+          if [ -n "${{ secrets.BLOCKLIST_CANARY_PRIVATE_KEY }}" ]; then
+            echo "${{ secrets.BLOCKLIST_CANARY_PRIVATE_KEY }}" > local/dev-signing-private-key.pem
+            chmod 600 local/dev-signing-private-key.pem
+          else
+            echo "::warning::BLOCKLIST_CANARY_PRIVATE_KEY is not set; the canary build will use an ephemeral key."
+          fi
 
       - name: Fetch sources
         run: ./gradlew :tools:blocklist:run --args="fetch" --console=plain
@@ -63,46 +84,78 @@ jobs:
       - name: Build signed canary release
         run: |
           VERSION_FLAG=""
-          if [ -n "${{ github.event.inputs.force_version }}" ]; then
-            VERSION_FLAG="--version ${{ github.event.inputs.force_version }}"
+          if [ -n "${{ inputs.force_version }}" ]; then
+            VERSION_FLAG="--version ${{ inputs.force_version }}"
           fi
           ./gradlew :tools:blocklist:run --args="build --channel canary --private-key local/dev-signing-private-key.pem $VERSION_FLAG" --console=plain
 
       - name: Verify release
         run: ./gradlew :tools:blocklist:run --args="verify" --console=plain
 
+      # A build or signature failure is a real failure and must fail the job.
+      # A *publishing* problem must not: the artifact is already built and
+      # verified, and failing here would discard a good release over a CDN
+      # hiccup. So this step exits 0 with a warning for anything environmental.
       - name: Publish to gh-pages
         run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          # Ensure the gh-pages branch exists (bootstrap once on first run).
-          (git fetch origin gh-pages --depth=1) || {
+          set -uo pipefail
+
+          MANIFEST="out/releases/latest.json"
+          if [ ! -f "$MANIFEST" ]; then
+            echo "::warning::No release manifest at $MANIFEST; nothing to publish."
+            exit 0
+          fi
+          if ! jq -e '.manifest.version' "$MANIFEST" >/dev/null 2>&1; then
+            echo "::warning::Release manifest is missing .manifest.version or malformed; nothing to publish."
+            exit 0
+          fi
+
+          if ! git fetch origin gh-pages --depth=1 2>/dev/null; then
+            echo "::notice::gh-pages branch does not exist yet; creating it."
             git checkout --orphan gh-pages
             git commit --allow-empty -m "init gh-pages"
-            git push -u origin gh-pages
-          }
+            if ! git push -u origin gh-pages; then
+              echo "::warning::Could not create gh-pages; skipping publish."
+              exit 0
+            fi
+            git checkout -f master
+          fi
+
           git worktree remove gh-pages-web --force 2>/dev/null || true
-          git worktree add gh-pages-web origin/gh-pages
+          if ! git worktree add gh-pages-web origin/gh-pages; then
+            echo "::warning::Could not add the gh-pages worktree; skipping publish."
+            exit 0
+          fi
+
           mkdir -p gh-pages-web/canary
-          cp out/releases/latest.json gh-pages-web/canary/manifest.json
-          cp out/releases/blocklist-*.json.gz gh-pages-web/canary/ 2>/dev/null || true
-          cp out/releases/delta-*.json.gz gh-pages-web/canary/ 2>/dev/null || true
+          cp "$MANIFEST" gh-pages-web/canary/manifest.json
+          # The glob assets are optional. An unmatched glob is passed to cp
+          # literally and fails, which under `set -e` used to abort the step
+          # after a successful build.
+          shopt -s nullglob
+          for asset in out/releases/blocklist-*.json.gz out/releases/delta-*.json.gz; do
+            cp "$asset" gh-pages-web/canary/
+          done
+          shopt -u nullglob
+
           git -C gh-pages-web add canary/
           if git -C gh-pages-web diff --cached --quiet; then
             echo "No changes to publish"
           else
-            git -C gh-pages-web commit -m "canary: $(jq -r '.manifest.releaseId' out/releases/latest.json) v$(jq -r '.manifest.version' out/releases/latest.json)"
-            git -C gh-pages-web push origin gh-pages
+            git -C gh-pages-web commit -m "canary: $(jq -r '.manifest.releaseId // "unknown"' "$MANIFEST") v$(jq -r '.manifest.version' "$MANIFEST")"
+            if ! git -C gh-pages-web push origin gh-pages; then
+              echo "::warning::Canary push to gh-pages failed; the release artifact is still valid."
+            fi
           fi
 
   # -----------------------------------------------------------------------
-  # Stable release: manual trigger only, production key, requires approval.
+  # Stable release: production key, approval-gated environment.
   # -----------------------------------------------------------------------
   stable:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.channel == 'stable'
     runs-on: ubuntu-latest
     environment: stable-release
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -119,6 +172,10 @@ jobs:
       - name: Write production signing key
         run: |
           mkdir -p local
+          if [ -z "${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}" ]; then
+            echo "::error::RELEASE_SIGNING_PRIVATE_KEY is not set; refusing to build a stable release."
+            exit 1
+          fi
           echo "${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}" > local/dev-signing-private-key.pem
           chmod 600 local/dev-signing-private-key.pem
 
@@ -131,8 +188,8 @@ jobs:
       - name: Build signed stable release
         run: |
           VERSION_FLAG=""
-          if [ -n "${{ github.event.inputs.force_version }}" ]; then
-            VERSION_FLAG="--version ${{ github.event.inputs.force_version }}"
+          if [ -n "${{ inputs.force_version }}" ]; then
+            VERSION_FLAG="--version ${{ inputs.force_version }}"
           fi
           ./gradlew :tools:blocklist:run --args="build --channel stable --private-key local/dev-signing-private-key.pem $VERSION_FLAG" --console=plain
 
@@ -141,25 +198,43 @@ jobs:
 
       - name: Publish to gh-pages
         run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          # Ensure the gh-pages branch exists (bootstrap once on first run).
-          (git fetch origin gh-pages --depth=1) || {
+          set -uo pipefail
+
+          MANIFEST="out/releases/latest.json"
+          if [ ! -f "$MANIFEST" ]; then
+            echo "::error::No release manifest at $MANIFEST; a stable release cannot be published without one."
+            exit 1
+          fi
+          if ! jq -e '.manifest.version' "$MANIFEST" >/dev/null 2>&1; then
+            echo "::error::Release manifest is malformed; refusing to publish a stable release."
+            exit 1
+          fi
+
+          if ! git fetch origin gh-pages --depth=1 2>/dev/null; then
+            echo "::notice::gh-pages branch does not exist yet; creating it."
             git checkout --orphan gh-pages
             git commit --allow-empty -m "init gh-pages"
             git push -u origin gh-pages
-          }
+            git checkout -f master
+          fi
+
           git worktree remove gh-pages-web --force 2>/dev/null || true
           git worktree add gh-pages-web origin/gh-pages
+
           mkdir -p gh-pages-web/stable
-          cp out/releases/latest.json gh-pages-web/stable/manifest.json
-          cp out/releases/blocklist-*.json.gz gh-pages-web/stable/ 2>/dev/null || true
-          cp out/releases/delta-*.json.gz gh-pages-web/stable/ 2>/dev/null || true
+          cp "$MANIFEST" gh-pages-web/stable/manifest.json
+          shopt -s nullglob
+          for asset in out/releases/blocklist-*.json.gz out/releases/delta-*.json.gz; do
+            cp "$asset" gh-pages-web/stable/
+          done
+          shopt -u nullglob
+
           git -C gh-pages-web add stable/
           if git -C gh-pages-web diff --cached --quiet; then
             echo "No changes to publish"
           else
-            git -C gh-pages-web commit -m "stable: $(jq -r '.manifest.releaseId' out/releases/latest.json) v$(jq -r '.manifest.version' out/releases/latest.json)"
+            git -C gh-pages-web commit -m "stable: $(jq -r '.manifest.releaseId // "unknown"' "$MANIFEST") v$(jq -r '.manifest.version' "$MANIFEST")"
+            # Stable is the channel users' devices trust. A failed push here
+            # must be loud, unlike the canary path.
             git -C gh-pages-web push origin gh-pages
           fi

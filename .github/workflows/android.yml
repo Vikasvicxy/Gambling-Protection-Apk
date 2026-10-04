@@ -56,7 +56,39 @@ jobs:
         run: ./gradlew lintDebug --console=plain
 
       - name: Unit tests
-        run: ./gradlew testDebugUnitTest --console=plain
+        # `testDebugUnitTest` only covers Android library and app modules. Seven
+        # modules here are pure kotlin-jvm (core:model, core:accountability,
+        # core:admin, core:release, protection:domain-engine, protection:dns,
+        # tools:blocklist) and expose a plain `test` task instead, so running
+        # only testDebugUnitTest silently skipped every test in them - including
+        # the DNS codec, the domain engine and the whole recovery model. Both
+        # invocations are required for a green run to mean anything.
+        run: |
+          ./gradlew testDebugUnitTest \
+            :core:accountability:test \
+            :core:admin:test \
+            :core:model:test \
+            :core:release:test \
+            :protection:dns:test \
+            :protection:domain-engine:test \
+            :tools:blocklist:test \
+            --console=plain
+
+      - name: Verify no test task was silently skipped
+        run: |
+          # A green Gradle exit code is not proof of coverage if a module has no
+          # tests wired up at all. Count the suites that actually produced
+          # results and fail if the pure-JVM modules contributed nothing.
+          total=$(find . -path '*/build/test-results/*' -name 'TEST-*.xml' | wc -l)
+          echo "test result files: $total"
+          for module in core/model protection/dns protection/domain-engine tools/blocklist; do
+            count=$(find "./$module/build/test-results" -name 'TEST-*.xml' 2>/dev/null | wc -l)
+            echo "  $module: $count suite(s)"
+            if [ "$count" -eq 0 ]; then
+              echo "::error::$module produced no test results; its tests are not running in CI."
+              exit 1
+            fi
+          done
 
       - name: Upload lint report
         if: always()
