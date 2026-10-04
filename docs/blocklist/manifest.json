@@ -1,0 +1,14 @@
+{
+  "channel": "STABLE",
+  "delta": null,
+  "full": {
+    "fileName": "blocklist.json",
+    "sha256": "d47e0f6104561ce5cf510dab720b2fef0ede98f7b006be2782d16a0d15f6dc67",
+    "sizeBytes": 13215
+  },
+  "releaseId": "blocklist-20260404",
+  "releasedAtEpochMs": 1791113300080,
+  "rollback": false,
+  "schema": "gamblock-release-manifest-preview",
+  "version": 20260404
+}

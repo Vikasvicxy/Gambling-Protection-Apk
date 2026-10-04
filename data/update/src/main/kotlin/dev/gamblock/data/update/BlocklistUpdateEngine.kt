@@ -59,11 +59,11 @@ class BlocklistUpdateEngine @Inject constructor(
             val maxObserved = state.maxObservedVersion()
             val appVersionCode = appVersionCode()
 
-            val manifestText = fetchManifest() ?: return@withContext "manifest fetch failed"
-            val envelope = runCatching { ReleaseVerifier.parseEnvelope(manifestText) }.getOrElse { e ->
-                fail("manifest parse failed: ${e.message}")
-                return@withContext "manifest parse failed: ${e.message}"
+            val fetched = when (val outcome = fetchManifest()) {
+                is ManifestFetch.Failed -> return@withContext outcome.reason
+                is ManifestFetch.Ok -> outcome.value
             }
+            val envelope = fetched.envelope
             val manifest = envelope.manifest
 
             // 1) Signature first: trust nothing before the envelope verifies.
@@ -86,7 +86,7 @@ class BlocklistUpdateEngine @Inject constructor(
             // 3) Delta-first when it exists and its base matches our installed version.
             val delta = manifest.delta
             if (delta != null && preferDelta && delta.baseVersion == installed) {
-                val deltaPayload = fetchArtifact(delta.fileName)
+                val deltaPayload = fetchArtifact(delta.fileName, fetched.originBase)
                 if (deltaPayload != null) {
                     val applied = applyDelta(envelope, manifest, deltaPayload, keyRing, installed, appVersionCode, maxObserved)
                     if (applied) {
@@ -97,25 +97,94 @@ class BlocklistUpdateEngine @Inject constructor(
             }
 
             // 4) Full artifact fallback, or first-install / rollback delivery.
-            applyFull(envelope, manifest, keyRing, installed, appVersionCode, maxObserved)
+            applyFull(envelope, manifest, keyRing, installed, appVersionCode, maxObserved, fetched.originBase)
         }
 
-    private suspend fun fetchManifest(): String? =
-        try {
-            fetcher.fetch(config, config.manifestUrl, config.maxManifestBytes).decodeToString()
-        } catch (e: Exception) {
-            fail("manifest fetch failed: ${e.message}")
-            logger.w(Logs.DB, "update manifest fetch failed", e)
-            null
-        }
+    /** A manifest that parsed, plus the origin that served it. */
+    private data class FetchedManifest(
+        val envelope: SignedReleaseEnvelope,
+        val originBase: String,
+    )
 
-    private suspend fun fetchArtifact(fileName: String): ByteArray? =
-        try {
-            fetcher.fetch(config, config.artifactUrl(fileName), config.maxArtifactBytes)
-        } catch (e: Exception) {
-            logger.w(Logs.DB, "artifact fetch failed for $fileName", e)
-            null
+    private sealed interface ManifestFetch {
+        data class Ok(val value: FetchedManifest) : ManifestFetch
+        data class Failed(val reason: String) : ManifestFetch
+    }
+
+    /**
+     * Fetches and parses the manifest, walking the configured origins until one answers with
+     * something that is actually a release envelope.
+     *
+     * Both an unreachable host and a 200 that carries an unparseable body are treated as "this
+     * origin cannot serve us today", because they are the same from the caller's point of view: an
+     * HTML error page or a truncated response is just as useless as a 404, and abandoning the
+     * update over one bad origin is precisely the single point of failure this walk removes.
+     *
+     * Parsing here does not weaken anything. The signature is still verified immediately after, on
+     * the bytes of whichever origin answered, so a mirror returning garbage can only move the
+     * failure later in the pipeline - it can never make an unsigned manifest acceptable.
+     */
+    private suspend fun fetchManifest(): ManifestFetch {
+        val origins = config.candidateBaseUrls()
+        var lastDetail: String? = null
+        var sawParseFailure = false
+        for ((index, base) in origins.withIndex()) {
+            val url = "${base}manifest.json"
+            val text = try {
+                fetcher.fetch(config, url, config.maxManifestBytes).decodeToString()
+            } catch (e: Exception) {
+                lastDetail = e.message ?: e::class.java.simpleName
+                logger.w(Logs.DB, "manifest origin unavailable: $url", e)
+                continue
+            }
+            val envelope = runCatching { ReleaseVerifier.parseEnvelope(text) }.getOrElse { e ->
+                sawParseFailure = true
+                lastDetail = e.message ?: e::class.java.simpleName
+                logger.w(Logs.DB, "manifest from $url is not a release envelope", e)
+                return@getOrElse null
+            } ?: continue
+            if (index > 0) {
+                logger.i(Logs.DB, "manifest served by origin ${index + 1}/${origins.size} after earlier origin(s) failed")
+            }
+            return ManifestFetch.Ok(FetchedManifest(envelope, base))
         }
+        val summary = lastDetail ?: "no origins configured"
+        val reason = if (sawParseFailure) "manifest parse failed on all ${origins.size} origin(s)" else "manifest fetch failed on all ${origins.size} origin(s)"
+        fail("$reason: $summary")
+        logger.w(Logs.DB, "$reason: $summary")
+        return ManifestFetch.Failed(reason)
+    }
+
+    /**
+     * Fetches an artifact, trying the origin that served the manifest first and then every other
+     * configured origin.
+     *
+     * Artifacts are the large transfer, so this is where a single flaky host would otherwise cost
+     * the most. Callers treat null as unavailable and either try the other artifact kind or leave
+     * the last-known-good database untouched; a payload is never applied on the strength of where
+     * it came from, only on its signature and hash.
+     */
+    private suspend fun fetchArtifact(fileName: String, preferredBase: String?): ByteArray? {
+        val configured = config.candidateBaseUrls()
+        val ordered = buildList {
+            preferredBase?.let { add(it) }
+            addAll(configured)
+        }.distinct()
+        val clean = fileName.removePrefix("/")
+        var lastDetail: String? = null
+        for (base in ordered) {
+            val bytes = try {
+                fetcher.fetch(config, "${base}$clean", config.maxArtifactBytes)
+            } catch (e: Exception) {
+                lastDetail = e.message ?: e::class.java.simpleName
+                logger.w(Logs.DB, "artifact $clean unavailable at $base", e)
+                continue
+            }
+            return bytes
+        }
+        logger.w(Logs.DB, "artifact $clean unavailable on all ${ordered.size} origin(s): $lastDetail")
+        return null
+    }
 
     private suspend fun applyFull(
         envelope: SignedReleaseEnvelope,
@@ -124,8 +193,9 @@ class BlocklistUpdateEngine @Inject constructor(
         installed: Int,
         appVersionCode: Int,
         maxObserved: Int,
+        originBase: String?,
     ): String {
-        val payload = fetchArtifact(manifest.full.fileName)
+        val payload = fetchArtifact(manifest.full.fileName, originBase)
         if (payload == null) {
             fail("full artifact fetch failed")
             return "full artifact fetch failed"

@@ -304,11 +304,171 @@ class BlocklistUpdateEngineTest {
         var manifest: String? = null
         val artifacts = mutableMapOf<String, ByteArray>()
 
-        override suspend fun fetch(config: UpdateConfig, url: String, maxBytes: Long): ByteArray {
-            val local = manifest
-            if (url == config.manifestUrl && local != null) return local.encodeToByteArray()
-            val fileName = url.removePrefix(if (config.baseUrl.endsWith('/')) config.baseUrl else "${config.baseUrl}/")
-            return artifacts[fileName] ?: throw DownloadException("artifact not found: $fileName")
+        /** Artifacts published by exactly one origin, to model a partially deployed mirror. */
+        val originArtifacts = mutableMapOf<String, MutableMap<String, ByteArray>>()
+
+        /** Origins that behave as if unreachable (404, DNS failure, timeout...). */
+        val deadOrigins = mutableSetOf<String>()
+
+        /** Origins whose manifest body is a 200 carrying something that is not an envelope. */
+        val garbageOrigins = mutableSetOf<String>()
+
+        /** Every URL requested, in order, so tests can assert on failover behaviour. */
+        val requestedUrls = mutableListOf<String>()
+
+        fun publishOnlyAt(origin: String, name: String, bytes: ByteArray) {
+            originArtifacts.getOrPut(origin) { mutableMapOf() }[name] = bytes
         }
+
+        override suspend fun fetch(config: UpdateConfig, url: String, maxBytes: Long): ByteArray {
+            requestedUrls += url
+            val base = config.candidateBaseUrls().firstOrNull { url.startsWith(it) }
+                ?: throw DownloadException("unexpected origin for '$url'")
+            if (base in deadOrigins) throw DownloadException("http 404 from $base")
+
+            val name = url.removePrefix(base)
+            if (name == "manifest.json") {
+                if (base in garbageOrigins) return "{ not a release envelope }".encodeToByteArray()
+                val local = manifest ?: throw DownloadException("http 404 from $base")
+                return local.encodeToByteArray()
+            }
+            originArtifacts[base]?.get(name)?.let { return it }
+            return artifacts[name] ?: throw DownloadException("http 404 from $base for $name")
+        }
+    }
+
+    // ------------------------------------------------------------ origin failover
+
+    private val primary = UpdateConfig().candidateBaseUrls().first()
+    private val second = UpdateConfig().candidateBaseUrls()[1]
+
+    @Test
+    fun `dead primary origin fails over to a mirror and still applies`() = runTest {
+        val built = buildRelease(1, null, records(1, "a.example"))
+        serve(built)
+        fetcher.deadOrigins += primary
+
+        val result = engine(keyRingSource()).checkForUpdate()
+
+        assertThat(result).contains("applied full v1")
+        assertThat(domainDao.findAll()).hasSize(1)
+        assertThat(fetcher.requestedUrls.first()).startsWith(primary)
+        assertThat(fetcher.requestedUrls.filter { it.startsWith(second) }).isNotEmpty()
+    }
+
+    @Test
+    fun `manifest that is not an envelope on the primary falls through to a mirror`() = runTest {
+        val built = buildRelease(1, null, records(1, "a.example"))
+        serve(built)
+        fetcher.garbageOrigins += primary
+
+        val result = engine(keyRingSource()).checkForUpdate()
+
+        assertThat(result).contains("applied full v1")
+        assertThat(domainDao.findAll()).hasSize(1)
+    }
+
+    @Test
+    fun `every origin returning garbage reports a parse failure rather than applying`() = runTest {
+        fetcher.garbageOrigins += UpdateConfig().candidateBaseUrls()
+
+        val result = engine(keyRingSource()).checkForUpdate()
+
+        assertThat(result).contains("manifest parse failed")
+        assertThat(state.state.value).isEqualTo(UpdateState.FAILED)
+        assertThat(domainDao.findAll()).isEmpty()
+    }
+
+    @Test
+    fun `every origin dead keeps the last known good database and applies nothing`() = runTest {
+        // v1 already live from a previous successful check.
+        val first = buildRelease(1, null, records(1, "keep.example"))
+        serve(first)
+        engine(keyRingSource()).checkForUpdate()
+        assertThat(domainDao.findAll()).hasSize(1)
+
+        // Next release exists but no origin can serve it.
+        val next = buildRelease(2, records(1, "keep.example"), records(2, "keep.example", "new.example"))
+        serve(next)
+        fetcher.deadOrigins += UpdateConfig().candidateBaseUrls()
+
+        val result = engine(keyRingSource()).checkForUpdate()
+
+        assertThat(result).contains("manifest fetch failed")
+        assertThat(state.state.value).isEqualTo(UpdateState.FAILED)
+        // Protection continues on the previously verified release.
+        assertThat(domainDao.findAll()).hasSize(1)
+        assertThat(domainDao.findAll().map { it.domain }).containsExactly("keep.example")
+        assertThat(metaDao.get(BlocklistRepository.KEY_VERSION)).isEqualTo("1")
+    }
+
+    @Test
+    fun `artifact only present on a mirror is fetched from there`() = runTest {
+        val built = buildRelease(1, null, records(1, "a.example"))
+        // The manifest origin advertises the release but its copy of the payload is missing,
+        // which is what a half-finished deployment actually looks like.
+        fetcher.manifest = ReleaseVerifier.encodeEnvelope(built.envelope)
+        fetcher.publishOnlyAt(second, built.envelope.manifest.full.fileName, built.fullPayload)
+
+        val result = engine(keyRingSource()).checkForUpdate()
+
+        assertThat(result).contains("applied full v1")
+        assertThat(domainDao.findAll()).hasSize(1)
+        // The mirror origin was consulted for the payload.
+        assertThat(fetcher.requestedUrls.filter { it == "${second}${built.envelope.manifest.full.fileName}" })
+            .isNotEmpty()
+    }
+
+    @Test
+    fun `a mirror serving a forged manifest is still rejected by signature`() = runTest {
+        // The primary origin is dead, so the only content on offer comes from mirrors - and that
+        // content is a well-formed envelope with correct hashes, signed by a key we do not trust.
+        // Availability is widened without widening trust: it must still be refused.
+        val forged = buildRelease(9, null, records(9, "evil.example"), signing = wrongKeyPair)
+        serve(forged)
+        fetcher.deadOrigins += primary
+
+        val result = engine(keyRingSource()).checkForUpdate()
+
+        assertThat(result).contains("signature rejected")
+        assertThat(state.state.value).isEqualTo(UpdateState.FAILED)
+        assertThat(domainDao.findAll()).isEmpty()
+        // The forgery really did come off the wire, so this is a rejection and not a skip.
+        assertThat(fetcher.requestedUrls.filter { it.endsWith("manifest.json") }.size).isAtLeast(2)
+    }
+
+    @Test
+    fun `candidate origins are https only and de-duplicated`() {
+        val config = UpdateConfig(
+            baseUrl = "https://primary.example/cdn/",
+            fallbackBaseUrls = listOf(
+                "https://primary.example/cdn/",
+                "https://mirror.example/cdn",
+                "http://insecure.example/cdn/",
+                "   ",
+            ),
+        )
+
+        assertThat(config.candidateBaseUrls()).containsExactly(
+            "https://primary.example/cdn/",
+            "https://mirror.example/cdn/",
+        ).inOrder()
+        assertThat(config.manifestUrls()).containsExactly(
+            "https://primary.example/cdn/manifest.json",
+            "https://mirror.example/cdn/manifest.json",
+        ).inOrder()
+        assertThat(config.artifactUrls("full.json")).containsExactly(
+            "https://primary.example/cdn/full.json",
+            "https://mirror.example/cdn/full.json",
+        ).inOrder()
+    }
+
+    @Test
+    fun `a base without a trailing slash still yields well formed urls`() {
+        val config = UpdateConfig(baseUrl = "https://primary.example/cdn", fallbackBaseUrls = emptyList())
+
+        assertThat(config.candidateBaseUrls()).containsExactly("https://primary.example/cdn/")
+        assertThat(config.manifestUrls()).containsExactly("https://primary.example/cdn/manifest.json")
+        assertThat(config.manifestUrl).isEqualTo("https://primary.example/cdn/manifest.json")
     }
 }
