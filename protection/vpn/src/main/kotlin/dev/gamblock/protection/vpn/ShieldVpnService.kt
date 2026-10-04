@@ -60,6 +60,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -107,6 +108,15 @@ class ShieldVpnService : VpnService() {
     private val activeUpstreamSockets = ConcurrentHashMap.newKeySet<DatagramSocket>()
     private val networkGeneration = AtomicLong(0)
     private var networkCallbackRegistered = false
+
+    /**
+     * Parks DNS queries while the physical network is changing instead of dropping them.
+     *
+     * See [NetworkHandoffGate] for why a dropped query is a user-visible failure. The tunnel is
+     * never rebuilt during a handoff: the reader keeps draining the tun file descriptor and the
+     * packets stay queued in the kernel buffer until a replacement upstream is available.
+     */
+    private val handoffGate = NetworkHandoffGate()
 
     /** Exemptions baked into the currently established tunnel. */
     @Volatile
@@ -538,6 +548,20 @@ class ShieldVpnService : VpnService() {
 
     private fun forwardQuery(query: ByteArray, runGeneration: Long): ByteArray? {
         if (!isCurrentRun(runGeneration)) return null
+        // Park through a network handoff rather than failing. A query that arrives while the old
+        // network is down and the new one is still being resolved waits here for the replacement
+        // upstream, then goes out over it. Nothing is sent to the network that just disappeared.
+        val stable = runBlocking {
+            handoffGate.awaitStable(
+                generation = { currentUpstreamGeneration() },
+                sleep = { ms -> delay(ms) },
+            )
+        }
+        if (!stable) {
+            logger.w(Logs.DNS, "upstream did not settle within the handoff window; failing query")
+            return null
+        }
+        if (!isCurrentRun(runGeneration)) return null
         val upstream = upstreamProvider.currentUpstream()
         val generation = currentUpstreamGeneration()
         if (!upstreamSemaphore.tryAcquire(2, TimeUnit.SECONDS)) return null
@@ -654,9 +678,15 @@ class ShieldVpnService : VpnService() {
     private fun currentUpstreamGeneration(): Long = networkGeneration.get() + upstreamProvider.generation
 
     private fun handleNetworkChange() {
+        // Open the handoff window *before* touching sockets, so a query that arrives in this
+        // window waits for the replacement upstream instead of racing a generation bump and being
+        // discarded.
+        handoffGate.onHandoffStart(currentUpstreamGeneration())
         networkGeneration.incrementAndGet()
         closeUpstreamSockets()
         upstreamProvider.refreshNow()
+        // refreshNow() may already have produced a new upstream, which closes the window.
+        handoffGate.onUpstreamGeneration(currentUpstreamGeneration())
     }
 
     private fun closeUpstreamSockets() {

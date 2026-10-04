@@ -189,6 +189,40 @@
                 tools:node="remove" />
         </provider>
 
+        <!--
+            Restarts protection after a reboot or an app update.
+
+            Exported with a permission guard because both broadcasts originate outside the app:
+            BOOT_COMPLETED is sent by the system to every app, and MY_PACKAGE_REPLACED is sent by
+            the package installer. android.permission.RECEIVE_BOOT_COMPLETED is already declared,
+            and reusing it as the guard means no other app can trigger a VPN start by broadcasting
+            either action - without this, any installed app could force Shield to bring its tunnel
+            up at will.
+
+            The receiver reads the user's on/off preference before starting anything, so a user who
+            turned protection off does not get it back on after rebooting.
+        -->
+        <!--
+            Fully qualified rather than relative: the receiver lives in the protection:vpn module
+            whose package is not a suffix of the app package, so a relative ".protection.vpn..."
+            name would silently resolve to a class that does not exist and lint would (correctly)
+            refuse to let the build ship.
+        -->
+        <receiver
+            android:name="dev.gamblock.protection.vpn.ProtectionRestartReceiver"
+            android:exported="true"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
+            <intent-filter android:priority="900">
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!--
+                    HTC's boot broadcast. Undeclared on every other device, so it is simply never
+                    delivered there; keeping it costs nothing and covers the devices that need it.
+                -->
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>
