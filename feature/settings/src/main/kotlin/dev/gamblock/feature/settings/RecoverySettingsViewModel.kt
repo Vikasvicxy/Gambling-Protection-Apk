@@ -1,5 +1,7 @@
 package dev.gamblock.feature.settings
 
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -27,6 +29,7 @@ import dev.gamblock.data.repository.ProtectionCommandCoordinator
 import dev.gamblock.data.repository.ProtectionGateHolder
 import dev.gamblock.data.repository.ProtectionUptimeSummary
 import dev.gamblock.data.repository.SobrietyReportGenerator
+import dev.gamblock.protection.tamper.ShieldAccessibilityGuard
 import dev.gamblock.protection.vpn.PrivateDnsStatus
 import dev.gamblock.protection.vpn.PrivateDnsWatchdog
 import dev.gamblock.protection.vpn.VpnStateStore
@@ -57,6 +60,11 @@ data class RecoverySettingsUiState(
     val quicDrops: Long = 0L,
     val ipv6Suppressed: Long = 0L,
     val searchEngineQueries: Long = 0L,
+    val encryptedUpstreamQueries: Long = 0L,
+    val encryptedUpstreamFailures: Long = 0L,
+    val uninstallGuardEnabled: Boolean = false,
+    /** True when the AccessibilityService is actually on in Android settings. */
+    val uninstallGuardServiceEnabled: Boolean = false,
     val appRiskScan: AppRiskScanUiState = AppRiskScanUiState(),
     val excludedPackages: Set<String> = emptySet(),
     val installableApps: List<InstalledAppCandidate> = emptyList(),
@@ -103,6 +111,7 @@ data class BackupRestorePreview(
 
 @HiltViewModel
 class RecoverySettingsViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
     private val recoveryRepository: RecoveryRepository,
     private val guardianPinRepository: GuardianPinRepository,
@@ -202,6 +211,13 @@ class RecoverySettingsViewModel @Inject constructor(
               quicDrops = vpn.quicDrops,
               ipv6Suppressed = vpn.ipv6Suppressed,
               searchEngineQueries = vpn.searchEngineQueries,
+              encryptedUpstreamQueries = vpn.encryptedUpstreamQueries,
+              encryptedUpstreamFailures = vpn.encryptedUpstreamFailures,
+              // Read straight from the system rather than from a cached flow: the
+              // user toggles the service in Android settings, not here, so this has
+              // to be re-read whenever the settings stream re-emits.
+              uninstallGuardEnabled = settings.uninstallGuardEnabled,
+              uninstallGuardServiceEnabled = ShieldAccessibilityGuard.isEnabled(context),
               appRiskScan = riskScan,
             statusMessage = status,
             reportFile = file,
@@ -389,8 +405,37 @@ class RecoverySettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setSafeSearchAssistEnabled(enabled) }
     }
 
-    /**
-     * Encrypted upstream is a privacy gain, not a weakening of the filter, so it is
+/** Sends the user to Android's accessibility settings to enable the uninstall guard. */
+    fun openUninstallGuardSettings() {
+        val intent = ShieldAccessibilityGuard.accessibilitySettingsIntent()
+        runCatching { context.startActivity(intent) }
+            .onFailure {
+                _status.value = "Could not open Android settings here; enable it manually " +
+                    "under Settings, Accessibility."
+            }
+    }
+
+/**
+ * Turning the uninstall guard off is deliberately not gated behind the PIN.
+ *
+ * The PIN exists to stop impulsive removal of protection. Gating the *off* switch
+ * behind it would mean someone who set the PIN could never back it out of the app
+ * once the accessibility service is gone, which is exactly the stranding the guard
+ * is supposed to avoid.
+ */
+    fun setUninstallGuardEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setUninstallGuardEnabled(enabled)
+            _status.value = if (enabled) {
+                "Uninstall guard armed"
+            } else {
+                "Uninstall guard off"
+            }
+        }
+    }
+
+/**
+ * Encrypted upstream is a privacy gain, not a weakening of the filter, so it is
      * not gated behind the guardian PIN. Turning it *off* is what re-exposes lookups
      * to the network, so that direction is gated.
      */

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="uninstall_guard_service_label">Shield uninstall guard</string>
+    <string name="uninstall_guard_service_description">Notices when you open the system screen for removing Shield, so it can ask for your guardian PIN first. It does not read screen contents, collect anything, or send it anywhere.</string>
+
+    <string name="uninstall_guard_challenge_title">Hold on a moment</string>
+    <string name="uninstall_guard_challenge_body">Removing Shield takes protection away at exactly the moment you asked for it. Enter your guardian PIN to continue.</string>
+    <string name="uninstall_guard_challenge_hint">Guardian PIN</string>
+    <string name="uninstall_guard_challenge_confirm">Confirm</string>
+    <string name="uninstall_guard_challenge_cancel">Not now</string>
+    <string name="uninstall_guard_challenge_checking">Checking…</string>
+    <string name="uninstall_guard_challenge_bad_format">Enter all four digits.</string>
+    <string name="uninstall_guard_challenge_wrong">That PIN did not match. Try again.</string>
+    <string name="uninstall_guard_challenge_unlocked">Guardian PIN accepted.</string>
+</resources>

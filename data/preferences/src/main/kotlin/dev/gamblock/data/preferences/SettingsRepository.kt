@@ -46,6 +46,14 @@ data class SettingsState(
     val guardianPinEnabled: Boolean = false,
     val blockEncryptedBrowsers: Boolean = true,
     val privateDnsAlertEnabled: Boolean = true,
+    /**
+     * Challenge with the guardian PIN when the system uninstall screen is opened.
+     *
+     * Off by default. It requires the user to enable an AccessibilityService, which
+     * is a significant ask, so it is opt-in and can be switched off from inside the
+     * app at any time.
+     */
+    val uninstallGuardEnabled: Boolean = false,
     val urgeSurferHaptics: Boolean = true,
     /**
      * Answer AAAA queries with an empty NOERROR so clients fall back to IPv4,
@@ -155,6 +163,9 @@ class SettingsRepository @Inject constructor(
     suspend fun setEncryptedDnsEnabled(enabled: Boolean) = update { it.copy(encryptedDnsEnabled = enabled) }
 
     suspend fun setPrivateDnsAlertEnabled(enabled: Boolean) = update { it.copy(privateDnsAlertEnabled = enabled) }
+
+    suspend fun setUninstallGuardEnabled(enabled: Boolean) =
+        update { it.copy(uninstallGuardEnabled = enabled) }
 
     suspend fun setUrgeSurferHaptics(enabled: Boolean) = update { it.copy(urgeSurferHaptics = enabled) }
 

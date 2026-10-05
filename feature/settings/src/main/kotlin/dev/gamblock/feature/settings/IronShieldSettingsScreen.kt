@@ -42,6 +42,7 @@ fun IronShieldSettingsRoute(
     var urgeOpen by remember { mutableStateOf(false) }
     var fortressOpen by remember { mutableStateOf(false) }
     var defenseOpen by remember { mutableStateOf(false) }
+    var deviceOpen by remember { mutableStateOf(false) }
     var wellnessOpen by remember { mutableStateOf(false) }
     var crisisOpen by remember { mutableStateOf(false) }
     var askingExportPassphrase by remember { mutableStateOf(false) }
@@ -129,6 +130,71 @@ fun IronShieldSettingsRoute(
                     onEnabledChanged = viewModel::setGuardianPinEnabled,
                     onSetPin = viewModel::setGuardianPin,
                     onClearPin = viewModel::clearGuardianPin,
+                )
+            }
+
+            SettingsCategoryCard(
+                title = "Device & Uninstall Protection",
+                summary = "Stand between an impulsive uninstall and the moment it takes away.",
+                expanded = deviceOpen,
+                onToggleExpanded = { deviceOpen = !deviceOpen },
+            ) {
+                FeatureToggleCard(
+                    definition = FeatureToggleDefinition(
+                        key = "uninstall_guard",
+                        title = "Uninstall Guard",
+                        whatItDoes = "Watches for the system screen that uninstalls Shield. When it opens, Shield asks for your guardian PIN before letting you continue. It cannot remove the system Uninstall button, and it cannot stop someone who knows your PIN.",
+                        whyItHelps = "Craving peaks are exactly the moments protection is most likely to get removed. Requiring a deliberate 4-digit entry turns an impulse into a decision, without ever trapping you on your own phone: the prompt is always dismissible, and you can switch this off here at any time.",
+                        enabled = state.uninstallGuardEnabled,
+                        onToggle = viewModel::setUninstallGuardEnabled,
+                        locked = !state.guardianPinConfigured || !state.uninstallGuardServiceEnabled,
+                        lockNote = when {
+                            !state.guardianPinConfigured -> "Set a guardian PIN first, above"
+                            !state.uninstallGuardServiceEnabled ->
+                                "Turn on Shield uninstall guard in Android Accessibility settings"
+                            else -> null
+                        },
+                    ),
+                    expanded = deviceOpen,
+                    onToggleExpanded = {},
+                )
+                ShieldButton(
+                    text = if (state.uninstallGuardServiceEnabled) {
+                        "Review the uninstall guard in Android settings"
+                    } else {
+                        "Turn on the uninstall guard"
+                    },
+                    onClick = viewModel::openUninstallGuardSettings,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                // Disclosing the Play policy position in-product: this feature uses an
+                // API whose acceptable use Google judges narrowly, and the user is the
+                // one who has to answer for that if the app is published.
+                ShieldText(
+                    text = "How this works: the guard runs as an Android AccessibilityService, " +
+                        "which is a permission Android only grants through your explicit " +
+                        "confirmation in system settings. Shield uses it solely to notice when " +
+                        "the app-info screen appears. It does not read screen contents, does not " +
+                        "inspect other apps, records nothing, and sends nothing anywhere. Note " +
+                        "that Google Play restricts the Accessibility API to accessibility " +
+                        "tools, so a Play release of this feature may be rejected; a " +
+                        "self-hosted build is unaffected.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                ShieldText(
+                    text = if (state.uninstallGuardServiceEnabled) {
+                        "Uninstall guard is active in Android settings."
+                    } else {
+                        "Uninstall guard is not enabled in Android settings, so it cannot " +
+                            "challenge anything right now."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (state.uninstallGuardServiceEnabled) {
+                        ShieldPalette.Green
+                    } else {
+                        ShieldPalette.Orange
+                    },
                 )
             }
 

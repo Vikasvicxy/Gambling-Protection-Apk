@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        The uninstall guard is an AccessibilityService. BIND_ACCESSIBILITY_SERVICE
+        is declared on the service below as android:permission, which is the platform
+        requiring only the user's explicit consent in Settings; it is not a
+        uses-permission this module asks for.
+    -->
+    <application>
+        <!--
+            No <activity> is declared here on purpose. The challenge is a
+            TYPE_ACCESSIBILITY_OVERLAY window added directly by the service, so it
+            needs neither a task of its own nor the SYSTEM_ALERT_WINDOW permission an
+            Activity-based overlay would require.
+        -->
+        <service
+            android:name=".ShieldAccessibilityGuard"
+            android:exported="true"
+            android:label="@string/uninstall_guard_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/shield_accessibility_guard" />
+        </service>
+    </application>
+</manifest>

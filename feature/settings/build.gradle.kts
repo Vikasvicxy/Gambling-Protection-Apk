@@ -43,6 +43,7 @@ dependencies {
     implementation(project(":data:preferences"))
     implementation(project(":data:repository"))
     implementation(project(":protection:health"))
+    implementation(project(":protection:tamper"))
     implementation(project(":protection:vpn"))
 
     implementation(platform(libs.compose.bom))

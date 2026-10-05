@@ -30,6 +30,9 @@ dependencies {
     api(project(":core:common"))
     api(project(":core:model"))
     api(project(":core:security"))
+    // The uninstall guard challenges on the existing guardian PIN rather than
+    // storing a second credential.
+    implementation(project(":data:preferences"))
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
