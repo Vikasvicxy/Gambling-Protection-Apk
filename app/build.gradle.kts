@@ -92,18 +92,14 @@ android {
         applicationId = "dev.gamblock.shield"
         minSdk = 26
         targetSdk = 36
-        // v1.1.0: the feature release carrying stages 1-4 (per-app split
-        // tunneling, IPv6 leak protection, SafeSearch assistance, the app risk
-        // scan, and coverage-based recovery savings).
+        // v1.3.0: encrypted DNS upstream, the optional uninstall guard, and the
+        // 90-day recovery heatmap. Also the groundwork for TLS SNI parsing and
+        // LAN route exclusions.
         //
-        // versionCode moves 4 -> 5, which is what Play actually requires on
-        // every upload to an existing app. The marketing version moves off
-        // 1.0.0 because a pushed `v1.0.0` tag already identifies the baseline:
-        // shipping new features under the version number that names different
-        // code would make the tag and the installed APK describe two different
-        // apps.
-        versionCode = 5
-        versionName = "1.2.0"
+        // versionCode moves 5 -> 6, which is what Play actually requires on every
+        // upload to an existing app.
+        versionCode = 6
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

@@ -1,10 +1,10 @@
-Shield v1.2.0
+Shield v1.3.0
 
-STEADIER ON BAD NETWORKS
-- Blocklist updates now retry across three CDNs, and keep the last known-good list if every origin fails. Blocking never stops while offline.
-- DNS is briefly held during a network change instead of failing while the new route settles.
+LESS TRACKING
+- Optional DNS-over-HTTPS: allowed sites resolve over HTTPS to Quad9, so your network sees a lookup, not what for. If Quad9 is down, Shield says so, not by leaking the name.
 
-BATTERY
-- One tap opens your vendor's autostart screen (MIUI, Oppo, Vivo, Huawei, Samsung and more) so the VPN is not killed in the background.
+HARDER TO GIVE UP
+- Optional uninstall guard: the uninstall screen asks for your guardian PIN first. It never challenges Shield's own screens, and is always dismissible. Play restricts the Accessibility API.
+- 90-day recovery heatmap; unprotected days in red.
 
-No account, no telemetry, no installed-app uploads.
+No account, no telemetry.
