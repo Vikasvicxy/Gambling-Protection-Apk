@@ -59,8 +59,21 @@ data class SettingsState(
      * endpoint. Deliberately *not* called "enforcement": DNS-level forcing does
      * not work under TLS. See SafeSearchPolicy for the full reasoning.
      */
-    val safeSearchAssistEnabled: Boolean = false,
-)
+val safeSearchAssistEnabled: Boolean = false,
+      /**
+       * Send allowed queries to a DNS-over-HTTPS resolver instead of plain UDP 53.
+       *
+       * Plain UDP lets the network see every name Shield resolves, which is a far
+       * larger set than the blocked ones and reveals browsing even when nothing is
+       * blocked. DoH closes that.
+       *
+       * Trade-off, documented in the UI rather than hidden: DoH needs a working
+       * HTTPS path, so resolution is slower and it fails closed rather than falling
+       * back to plaintext if the provider is unreachable. Off by default so nobody
+       * loses resolution because of an opt-in they did not make.
+       */
+      val encryptedDnsEnabled: Boolean = false,
+  )
 
 @Singleton
 class SettingsRepository @Inject constructor(
@@ -138,6 +151,8 @@ class SettingsRepository @Inject constructor(
     suspend fun setGuardianPinEnabled(enabled: Boolean) = update { it.copy(guardianPinEnabled = enabled) }
 
     suspend fun setBlockEncryptedBrowsers(enabled: Boolean) = update { it.copy(blockEncryptedBrowsers = enabled) }
+
+    suspend fun setEncryptedDnsEnabled(enabled: Boolean) = update { it.copy(encryptedDnsEnabled = enabled) }
 
     suspend fun setPrivateDnsAlertEnabled(enabled: Boolean) = update { it.copy(privateDnsAlertEnabled = enabled) }
 

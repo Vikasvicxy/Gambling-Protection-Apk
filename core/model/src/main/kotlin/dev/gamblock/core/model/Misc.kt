@@ -18,6 +18,10 @@ data class VpnRuntimeState(
     val ipv6Suppressed: Long = 0L,
     /** Queries recognised as going to a search engine we can offer SafeSearch for. */
     val searchEngineQueries: Long = 0L,
+    /** Allowed queries resolved through DNS-over-HTTPS instead of plaintext UDP. */
+    val encryptedUpstreamQueries: Long = 0L,
+    /** DoH attempts that failed. These fail closed: the client is told SERVFAIL. */
+    val encryptedUpstreamFailures: Long = 0L,
     val failure: VpnFailure? = null,
     /** True when the VPN service was explicitly stopped by the user request. */
     val userStopped: Boolean = false,

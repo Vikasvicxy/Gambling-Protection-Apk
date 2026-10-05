@@ -125,6 +125,23 @@ object DnsResponseFactory {
     }
 
     /**
+     * Builds a SERVFAIL response echoing the original question.
+     *
+     * SERVFAIL rather than REFUSED when an upstream we chose fails: REFUSED asserts
+     * the query was refused on policy grounds, whereas SERVFAIL means "the resolver
+     * could not be reached", which is what actually happened. Clients retry SERVFAIL,
+     * so a temporary DoH provider outage heals instead of sticking.
+     */
+    fun servFail(query: ByteArray): ByteArray {
+        val id = DnsParser.headerId(query)
+        val qd = DnsParser.questionCount(query).coerceAtMost(1)
+        val base = header(id, DnsConstants.FLAG_QR or DnsConstants.RCODE_SERVER_FAILURE, qd, 0, 0, 0)
+        if (qd == 0) return base
+        val questionLength = questionBytes(query) ?: return base
+        return base + query.copyOfRange(12, 12 + questionLength)
+    }
+
+    /**
      * Builds an NXDOMAIN response that echoes the original question.
      * [blockMessageEnabled] is kept for future block-page experimentation.
      */

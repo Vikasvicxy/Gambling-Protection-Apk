@@ -389,7 +389,26 @@ class RecoverySettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setSafeSearchAssistEnabled(enabled) }
     }
 
-    /** Turning DoH/DoQ blocking off weakens the DNS shield, so it is gated. */
+    /**
+     * Encrypted upstream is a privacy gain, not a weakening of the filter, so it is
+     * not gated behind the guardian PIN. Turning it *off* is what re-exposes lookups
+     * to the network, so that direction is gated.
+     */
+    fun setEncryptedDnsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            if (enabled) {
+                settingsRepository.setEncryptedDnsEnabled(true)
+                _status.value = "DNS queries will be sent over HTTPS to Quad9"
+                return@launch
+            }
+            gateHolder.requestSensitiveChange {
+                settingsRepository.setEncryptedDnsEnabled(false)
+                _status.value = "Encrypted DNS off; lookups are visible to your network again"
+            }
+        }
+    }
+
+/** Turning DoH/DoQ blocking off weakens the DNS shield, so it is gated. */
     fun setBlockEncryptedBrowsers(enabled: Boolean) {
         viewModelScope.launch {
             if (enabled) {

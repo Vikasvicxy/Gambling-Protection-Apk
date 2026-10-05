@@ -72,6 +72,11 @@ import kotlinx.coroutines.withTimeoutOrNull
  * nor tunnel user traffic. Blocked queries receive NXDOMAIN; allowed queries are
  * forwarded to the carrier resolver, fail-open on upstream errors.
  *
+ * When encryptedDnsEnabled is set, allowed queries instead go to the configured
+ * DNS-over-HTTPS provider. That path fails *closed* with SERVFAIL, unlike the
+ * plaintext path which fails open, because downgrading would hand the name to the
+ * carrier while the UI still claimed the query was encrypted.
+ *
  * Security notes (see SECURITY.md): the fixed non-routable tun address is topologically
  * contained; hardcoded resolvers / DoH pinned clients are out of scope and documented.
  */
@@ -90,6 +95,16 @@ class ShieldVpnService : VpnService() {
     @Inject lateinit var appExclusionApplier: AppExclusionApplier
     @Inject lateinit var appExclusionRepository: AppExclusionRepository
     @Inject lateinit var recoveryRepository: RecoveryRepository
+
+    /**
+     * DoH resolvers keyed by physical-network generation.
+     *
+     * Each entry's transport is bound to the socket factory of the underlying
+     * network, so Shield's own HTTPS lookups leave via the real interface instead
+     * of re-entering this tunnel. Keyed by generation so a network change
+     * discards the stale client and its pooled sockets.
+     */
+    private val dohResolvers = HashMap<Long, DohUpstreamResolver>()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val lifecycleLock = Any()
@@ -196,6 +211,7 @@ class ShieldVpnService : VpnService() {
         unregisterNetworkCallback()
         exclusionWatcherJob?.cancel()
         exclusionWatcherJob = null
+        synchronized(dohResolvers) { dohResolvers.clear() }
         shutdown()
         scope.cancel()
         packetExecutor.shutdownNow()
@@ -566,11 +582,97 @@ class ShieldVpnService : VpnService() {
             }
         }
 
-        val answer = forwardQuery(query, generation)
+        // Encrypted upstream. When DoH is on, allowed queries go over HTTPS to the
+        // configured provider instead of plaintext UDP 53, so the network cannot see
+        // the names Shield resolves. Failures are NOT downgraded to plaintext:
+        // a silent fallback would hand the name to the carrier anyway while the
+        // UI still claimed protection. The client sees SERVFAIL, which is the
+        // honest outcome.
+        val answer = if (settings.encryptedDnsEnabled) {
+            val response = forwardQueryDoh(query, generation)
+            if (!isCurrentRun(generation)) return
+            response ?: DnsResponseFactory.servFail(query)
+        } else {
+            forwardQuery(query, generation)
+        }
         if (!isCurrentRun(generation)) return
-        val response = answer ?: DnsResponseFactory.refused(query)
-        writeResponse(udp, response, output)
-        logger.d(Logs.DNS, "ALLOW ${question.name} (upstream ${if (answer != null) "ok" else "fail-open"})")
+        val finalResponse = answer ?: DnsResponseFactory.refused(query)
+        writeResponse(udp, finalResponse, output)
+        logger.d(
+            Logs.DNS,
+            "ALLOW ${question.name} (${if (settings.encryptedDnsEnabled) "doh" else "udp"} " +
+                "${if (answer != null) "ok" else "failed"})",
+        )
+    }
+
+    /**
+     * Returns the resolver bound to the physical network for [networkGeneration].
+     *
+     * The transport gets that network's socket factory so its sockets are pinned to
+     * the real interface. Without this, Shield's DoH queries would be routed back
+     * into the tun this service owns and fail to resolve themselves.
+     */
+    private fun dohResolverFor(networkGeneration: Long): DohUpstreamResolver =
+        synchronized(dohResolvers) {
+            dohResolvers[networkGeneration]?.let { return it }
+            // Drop clients for generations we have left so pooled sockets and their
+            // bound file descriptors are released rather than leaked.
+            dohResolvers.keys.filter { it != networkGeneration }.forEach(dohResolvers::remove)
+            val socketFactory = upstreamProvider.currentUpstream().network?.let { network ->
+                runCatching { network.socketFactory }.getOrNull()
+            }
+            DohUpstreamResolver(
+                transport = OkHttpDohTransport(socketFactory = socketFactory),
+            ).also { dohResolvers[networkGeneration] = it }
+        }
+
+    /** Resolves [query] over DNS-over-HTTPS, honouring the same handoff parking as the UDP path. */
+    private fun forwardQueryDoh(query: ByteArray, runGeneration: Long): ByteArray? {
+        if (!isCurrentRun(runGeneration)) return null
+        handoffGate.onUpstreamGeneration(currentUpstreamGeneration())
+        return try {
+            val stable = runBlocking {
+                handoffGate.awaitStable(
+                    generation = { currentUpstreamGeneration() },
+                    sleep = { ms -> delay(ms) },
+                )
+            }
+            if (!stable) {
+                logger.w(Logs.DNS, "upstream did not settle during handoff; failing DoH query")
+                return null
+            }
+            if (!isCurrentRun(runGeneration)) return null
+            // Bound DoH concurrency the same way as the UDP path: each call holds a
+            // thread for the length of an HTTPS round trip.
+            if (!upstreamSemaphore.tryAcquire(DOH_SLOT_WAIT_MS, TimeUnit.MILLISECONDS)) {
+                logger.w(Logs.DNS, "doh query dropped: no upstream slot within ${DOH_SLOT_WAIT_MS}ms")
+                return null
+            }
+            try {
+                if (!isCurrentRun(runGeneration)) return null
+                val generation = currentUpstreamGeneration()
+                if (generation != currentUpstreamGeneration()) return null
+                when (val result = dohResolverFor(generation).resolve(query)) {
+                    is DohUpstreamResolver.DohResult.Resolved -> {
+                        stateStore.recordEncryptedUpstreamQuery()
+                        result.response
+                    }
+                    is DohUpstreamResolver.DohResult.Failed -> {
+                        stateStore.recordEncryptedUpstreamFailure()
+                        logger.w(Logs.DNS, "doh upstream failed: ${result.reason}")
+                        null
+                    }
+                }
+            } finally {
+                upstreamSemaphore.release()
+            }
+        } catch (t: Throwable) {
+            if (isCurrentRun(runGeneration)) {
+                stateStore.recordEncryptedUpstreamFailure()
+                logger.w(Logs.DNS, "doh upstream error: ${t.message}")
+            }
+            null
+        }
     }
 
     private fun forwardQuery(query: ByteArray, runGeneration: Long): ByteArray? {
@@ -795,6 +897,9 @@ class ShieldVpnService : VpnService() {
         private const val MAX_DNS_REPLY = 2_048
         private const val READ_SIZE = 9_000
         private const val TUN_POLL_TIMEOUT_MS = 5_000
+
+    /** How long a DoH query waits for a free upstream slot before being failed. */
+    private const val DOH_SLOT_WAIT_MS = 2_000L
 
         fun launch(context: Context) {
             val intent = Intent(context, ShieldVpnService::class.java).setAction(ACTION_START)

@@ -72,6 +72,16 @@ class VpnStateStore @Inject constructor() {
         _state.value = prev.copy(searchEngineQueries = prev.searchEngineQueries + 1)
     }
 
+    fun recordEncryptedUpstreamQuery() {
+        val prev = _state.value
+        _state.value = prev.copy(encryptedUpstreamQueries = prev.encryptedUpstreamQueries + 1)
+    }
+
+    fun recordEncryptedUpstreamFailure() {
+        val prev = _state.value
+        _state.value = prev.copy(encryptedUpstreamFailures = prev.encryptedUpstreamFailures + 1)
+    }
+
     fun resetCounters() {
         _state.value = _state.value.copy(
             queriesHandled = 0L,
@@ -81,6 +91,8 @@ class VpnStateStore @Inject constructor() {
             quicDrops = 0L,
             ipv6Suppressed = 0L,
             searchEngineQueries = 0L,
+            encryptedUpstreamQueries = 0L,
+            encryptedUpstreamFailures = 0L,
         )
     }
 }

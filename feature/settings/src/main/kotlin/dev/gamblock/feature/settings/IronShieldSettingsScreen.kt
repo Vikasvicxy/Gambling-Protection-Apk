@@ -152,6 +152,18 @@ fun IronShieldSettingsRoute(
                 )
                 FeatureToggleCard(
                     definition = FeatureToggleDefinition(
+                        key = "encrypted_dns",
+                        title = "Encrypt DNS Queries (DNS-over-HTTPS)",
+                        whatItDoes = "Sends the lookups Shield allows to a DNS-over-HTTPS resolver (Quad9 by default) instead of plain DNS on port 53. Blocked sites are still blocked; this only hides the sites you are allowed to visit.",
+                        whyItHelps = "Plain DNS lets your network see every name your phone looks up, which is a far bigger list than the blocked ones and describes your browsing even when nothing is blocked. DoH hides that list. The honest trade-off: DoH needs a working HTTPS connection, so it is slower, and if the provider cannot be reached Shield returns a temporary failure rather than quietly sending your query in the clear.",
+                        enabled = state.settings.encryptedDnsEnabled,
+                        onToggle = viewModel::setEncryptedDnsEnabled,
+                    ),
+                    expanded = defenseOpen,
+                    onToggleExpanded = {},
+                )
+                FeatureToggleCard(
+                    definition = FeatureToggleDefinition(
                         key = "private_dns",
                         title = "Private DNS Detection Alert",
                         whatItDoes = "Watches Android's Private DNS (DoT) setting and warns you on the dashboard when it is on, with a button to open the setting.",
