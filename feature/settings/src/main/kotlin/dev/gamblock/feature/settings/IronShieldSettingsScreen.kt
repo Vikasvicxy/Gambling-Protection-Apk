@@ -164,7 +164,11 @@ fun IronShieldSettingsRoute(
                     } else {
                         "Turn on the uninstall guard"
                     },
-                    onClick = viewModel::openUninstallGuardSettings,
+                    // Always the disclosure, even when the service is already on.
+                    // Play's requirement is that the disclosure precedes the system
+                    // prompt, and "already enabled" does not make the next prompt go
+                    // away.
+                    onClick = viewModel::requestUninstallGuardConsent,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 // Disclosing the Play policy position in-product: this feature uses an
@@ -455,6 +459,13 @@ fun IronShieldSettingsRoute(
             preview = preview,
             onConfirm = viewModel::confirmRestore,
             onDismiss = viewModel::dismissRestorePreview,
+        )
+    }
+
+    if (state.uninstallGuardDisclosureVisible) {
+        ProminentDisclosureDialog(
+            onAccept = viewModel::acceptUninstallGuardDisclosure,
+            onDecline = viewModel::declineUninstallGuardDisclosure,
         )
     }
 }

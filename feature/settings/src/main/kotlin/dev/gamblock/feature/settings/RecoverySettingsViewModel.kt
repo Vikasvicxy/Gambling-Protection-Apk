@@ -64,7 +64,15 @@ data class RecoverySettingsUiState(
     val encryptedUpstreamFailures: Long = 0L,
     val uninstallGuardEnabled: Boolean = false,
     /** True when the AccessibilityService is actually on in Android settings. */
-    val uninstallGuardServiceEnabled: Boolean = false,
+        val uninstallGuardServiceEnabled: Boolean = false,
+        /**
+         * True while the pre-prompt prominent disclosure is on screen.
+         *
+         * Part of the UI state rather than a separate flow so the dialog is torn down
+         * with the rest of the screen state, and so it cannot be left stranded over an
+         * unrelated dialog.
+         */
+        val uninstallGuardDisclosureVisible: Boolean = false,
     val appRiskScan: AppRiskScanUiState = AppRiskScanUiState(),
     val excludedPackages: Set<String> = emptySet(),
     val installableApps: List<InstalledAppCandidate> = emptyList(),
@@ -136,6 +144,17 @@ class RecoverySettingsViewModel @Inject constructor(
     private val _pendingRestore = MutableStateFlow<PreparedRestore?>(null)
 
     /**
+     * Whether the prominent Accessibility disclosure is on screen.
+     *
+     * Deliberately in-memory only. This records that consent was given in this
+     * session, not a durable permission grant: the consent that matters is the one
+     * Android itself collects on the system screen, and caching an "already
+     * disclosed" flag would let a later prompt skip the disclosure, which is the exact
+     * thing Play prohibits.
+     */
+    private val consentGate = AccessibilityConsentGate()
+
+    /**
      * Held only in memory, and only between the passphrase dialog and the write.
      * It is deliberately not in Compose `rememberSaveable` state, which would
      * write it into the saved instance state Bundle on disk.
@@ -173,6 +192,7 @@ class RecoverySettingsViewModel @Inject constructor(
             backupState,
             exclusionState,
             _appRiskScan,
+            consentGate.disclosureVisible,
         ) {         values: Array<Any?> ->
         val settings = values[0] as SettingsState
         val metrics = values[1] as RecoveryMetrics
@@ -187,6 +207,7 @@ class RecoverySettingsViewModel @Inject constructor(
             val backup = values[10] as Pair<Boolean, PreparedRestore?>
             val exclusion = values[11] as Pair<Set<String>, List<InstalledAppCandidate>>
         val riskScan = values[12] as AppRiskScanUiState
+        val disclosureVisible = values[13] as Boolean
         val file = report.first
         val busy = report.second
         RecoverySettingsUiState(
@@ -219,8 +240,9 @@ class RecoverySettingsViewModel @Inject constructor(
               uninstallGuardEnabled = settings.uninstallGuardEnabled,
               uninstallGuardServiceEnabled = ShieldAccessibilityGuard.isEnabled(context),
               appRiskScan = riskScan,
-            statusMessage = status,
-            reportFile = file,
+statusMessage = status,
+        uninstallGuardDisclosureVisible = disclosureVisible,
+        reportFile = file,
             reportBusy = busy,
             backupBusy = backup.first,
             pendingRestore = backup.second?.let(::toPreview),
@@ -405,8 +427,67 @@ class RecoverySettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setSafeSearchAssistEnabled(enabled) }
     }
 
-/** Sends the user to Android's accessibility settings to enable the uninstall guard. */
-    fun openUninstallGuardSettings() {
+/**
+     * Step one of reaching Android's accessibility settings: raise the prominent
+     * disclosure.
+     *
+     * Play requires the disclosure to appear *before* the system permission prompt,
+     * not alongside it, so this deliberately does not start the settings activity.
+     * [acceptUninstallGuardDisclosure] is the only route to
+     * [openUninstallGuardSettings], which is why the redirect cannot be reached from
+     * anywhere else in the app.
+     */
+    fun requestUninstallGuardConsent() {
+        // Deliberately discards the decision: this function's only job is to raise the
+        // disclosure, and openUninstallGuardSettings is private precisely so no caller
+        // can reach it from here.
+        when (consentGate.requestConsent()) {
+            AccessibilityConsentGate.Decision.ShowDisclosure -> Unit
+            AccessibilityConsentGate.Decision.OpenAccessibilitySettings,
+            AccessibilityConsentGate.Decision.Cancelled,
+            -> return
+        }
+    }
+
+    /**
+     * Step two: the user has explicitly agreed, so the system prompt may now be shown.
+     *
+     * Accepting is not the same as enabling. Android still asks the user to confirm on
+     * its own screen, and Shield cannot enable the service from here even if it wanted
+     * to; this only records that the disclosure was seen and agreed to first.
+     */
+    fun acceptUninstallGuardDisclosure() {
+        // Only this branch may open the system screen. The gate's decision is matched
+        // exhaustively, so a new state cannot be added without deciding here what it
+        // means for the redirect.
+        when (consentGate.acceptDisclosure()) {
+            AccessibilityConsentGate.Decision.OpenAccessibilitySettings ->
+                openUninstallGuardSettings()
+            AccessibilityConsentGate.Decision.ShowDisclosure,
+            AccessibilityConsentGate.Decision.Cancelled,
+            -> return
+        }
+    }
+
+    /**
+     * Declining must leave the app exactly as it was: no settings activity, no change
+     * to the guard's enabled state, and no way to reach the prompt without agreeing.
+     */
+    fun declineUninstallGuardDisclosure() {
+        when (consentGate.declineDisclosure()) {
+            AccessibilityConsentGate.Decision.Cancelled ->
+                _status.value = "Not enabling the uninstall guard. Nothing changed."
+            // Matched explicitly rather than folded into a catch-all, so that if the
+            // gate ever returned something else it would not be able to reach the
+            // system screen by accident.
+            AccessibilityConsentGate.Decision.ShowDisclosure,
+            AccessibilityConsentGate.Decision.OpenAccessibilitySettings,
+            -> return
+        }
+    }
+
+    /** Sends the user to Android's accessibility settings to enable the uninstall guard. */
+    private fun openUninstallGuardSettings() {
         val intent = ShieldAccessibilityGuard.accessibilitySettingsIntent()
         runCatching { context.startActivity(intent) }
             .onFailure {
