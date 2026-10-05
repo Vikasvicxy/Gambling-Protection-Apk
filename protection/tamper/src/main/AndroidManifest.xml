@@ -28,6 +28,31 @@
         </service>
 
         <!--
+            Device Administrator fallback, kept ready in case Play rejects the
+            Accessibility service permanently. Not surfaced in the UI and never
+            requested on the user's behalf: the app only ever hands the user the
+            system prompt, from ShieldDeviceAdmin.activationIntent().
+
+            BIND_DEVICE_ADMIN is declared as android:permission, which is the platform
+            gating who may talk to this receiver, rather than a uses-permission this
+            app requests for itself.
+        -->
+        <receiver
+            android:name=".ShieldDeviceAdmin"
+            android:description="@string/device_admin_fallback_description"
+            android:exported="true"
+            android:label="@string/device_admin_fallback_label"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/shield_device_admin_policies" />
+
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <!--
             Fallback notice when the service above is unbound while the user still
             believes the guard is on. The platform gives no callback for an
             accessibility service being switched off, so this reacts to the lifecycle

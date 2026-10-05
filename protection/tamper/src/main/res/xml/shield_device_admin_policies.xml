@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Minimal policy set for the Device Administrator fallback.
+
+    force-lock is the policy that matters: a device administrator holding at least
+    one active policy cannot be removed by the ordinary Settings uninstall path, which
+    is exactly the friction the uninstall guard exists to create.
+
+    Nothing else is declared, on purpose. wipe-data, reset-password and
+    disable-camera would each be a separate Play-restricted capability, and none of
+    them helps hold an uninstall in place, so declaring them would cost user trust to
+    buy nothing. force-lock itself is used purely as the "this device has an active
+    administrator" marker; Shield never locks the screen through it.
+
+    The Accessibility guard stays the primary mechanism. This exists only so the app
+    can be switched over quickly if Play rejects that service permanently.
+-->
+<device-admin>
+    <uses-policies>
+        <force-lock />
+    </uses-policies>
+</device-admin>

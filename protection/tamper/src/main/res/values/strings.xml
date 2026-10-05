@@ -20,6 +20,14 @@
     -->
     <string name="uninstall_guard_fallback_channel">Uninstall guard status</string>
     <string name="uninstall_guard_fallback_channel_description">Notices when the uninstall guard needs your attention.</string>
+    <!--
+        Device Administrator fallback. Wording matches the accessibility guard's: it
+        states plainly what is watched and what is not, and claims no data handling,
+        because both labels are shown to the user on a system consent screen.
+    -->
+    <string name="device_admin_fallback_label">Shield uninstall fallback</string>
+    <string name="device_admin_fallback_description">Holds the system uninstall screen in place until you remove this administrator in Android settings. It does not read screen contents, lock your device, or collect anything.</string>
+
     <string name="uninstall_guard_fallback_title">Uninstall guard is not running</string>
     <string name="uninstall_guard_fallback_body">Shield noticed your uninstall guard is switched off, so removing Shield is currently unguarded. Some devices turn the service off after an update or reboot. Open Accessibility settings to turn "Shield uninstall guard" back on.</string>
 </resources>

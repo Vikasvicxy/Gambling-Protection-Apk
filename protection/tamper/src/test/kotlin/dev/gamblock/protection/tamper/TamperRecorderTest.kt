@@ -1,10 +1,24 @@
 package dev.gamblock.protection.tamper
 
 import com.google.common.truth.Truth.assertThat
+import dev.gamblock.core.testing.AndroidJceProviders
 import kotlinx.coroutines.test.runTest
+import org.junit.BeforeClass
 import org.junit.Test
 
 class TamperRecorderTest {
+
+    // BeforeClass rather than Before: StaticEvidenceHmac is a field initializer, so
+    // Mac.getInstance runs while the instance is constructed, before any @Before
+    // would have a chance to run.
+    companion object {
+        // BeforeClass rather than Before: StaticEvidenceHmac is a field initializer,
+        // so Mac.getInstance runs while the instance is constructed, before any
+        // @Before would have a chance to run.
+        @BeforeClass
+        @JvmStatic
+        fun dropAndroidJceProviders() = AndroidJceProviders.dropAndroidProviders()
+    }
 
     private val hmac = StaticEvidenceHmac("test-key-material".toByteArray())
     private val store = InMemoryTamperEvidenceStore()
