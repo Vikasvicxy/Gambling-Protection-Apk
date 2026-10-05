@@ -54,6 +54,23 @@ object VpnConfig {
     )
 
     val ALL_EXCLUSIONS: List<LanRoute> = LAN_EXCLUSIONS + LOCAL_EXCLUSIONS
+
+    /**
+     * Every route the tunnel claims.
+     *
+     * Exactly one /32 today: the tunnel's own DNS address. This list exists as a
+     * single source of truth so the SNI interceptor's precondition can be asserted
+     * in a test rather than by reading `ShieldVpnService.establish`.
+     *
+     * Adding a default route here makes every packet on the device enter the tunnel
+     * and requires a userspace TCP/IP stack to forward it. Without that stack,
+     * allowed connections are dropped and the device loses connectivity outright --
+     * a worse outcome than letting a TLS hostname through. See
+     * docs/ARCHITECTURE.md.
+     */
+    val ALL_ROUTES: List<LanRoute> = listOf(
+        LanRoute(TUN_ADDR, TUN_ADDR_PREFIX),
+    )
 }
 
 /** A single `addDisallowedRoute` entry. */

@@ -14,6 +14,8 @@ data class VpnRuntimeState(
     val exceptionsApplied: Long = 0L,
     /** QUIC / HTTP-3 UDP 443 packets silently dropped to force TCP fallback. */
     val quicDrops: Long = 0L,
+    /** TCP connections refused because the TLS ClientHello named a blocked host. */
+    val sniBlocks: Long = 0L,
     /** AAAA queries answered with an empty NOERROR to force IPv4. */
     val ipv6Suppressed: Long = 0L,
     /** Queries recognised as going to a search engine we can offer SafeSearch for. */

@@ -24,11 +24,15 @@ import dev.gamblock.core.common.clock.WallClock
 import dev.gamblock.core.common.dispatcher.DispatchersProvider
 import dev.gamblock.core.common.logging.Logs
 import dev.gamblock.core.common.logging.ShieldLogger
+import dev.gamblock.core.model.BlockDecision
+import dev.gamblock.core.model.Category
 import dev.gamblock.core.model.DecisionKind
 import dev.gamblock.core.model.Ipv6LeakPolicy
+import dev.gamblock.core.model.RuleHit
 import dev.gamblock.core.model.SafeSearchPolicy
 import dev.gamblock.core.model.SearchEngineMatch
 import dev.gamblock.core.model.VpnRuntimeState
+import dev.gamblock.core.model.util.stableHash
 import dev.gamblock.data.preferences.AppExclusionRepository
 import dev.gamblock.data.preferences.RecoveryRepository
 import dev.gamblock.data.preferences.SettingsRepository
@@ -224,6 +228,29 @@ class ShieldVpnService : VpnService() {
         stopVpn(VpnRuntimeState.VpnFailure.REVOKED, userStopped = false)
     }
 
+    /**
+     * TCP 443 SNI inspection.
+     *
+     * Held per run and recreated with the tunnel, because buffered ClientHello
+     * bytes describe a specific upstream generation: keeping them across a
+     * network change could inspect a half-received handshake against a blocklist
+     * that has since been recompiled.
+     */
+    @Volatile
+    private var sniInterceptor: TlsSniInterceptor = newSniInterceptor()
+
+    /**
+     * Blocks a host iff the schedule permits it. Read through the same gate the DNS
+     * path uses, so a paused schedule does not produce SNI resets either.
+     */
+    private fun newSniInterceptor(): TlsSniInterceptor = TlsSniInterceptor(
+        hostIsBlocked = { host ->
+            val scheduleActive = settingsRepository.settings.value.schedule
+                .isSystemCurrentlyActive(wallClock.nowEpochMillis())
+            blocker.decide(host, scheduleActive).decision == DecisionKind.BLOCK
+        },
+    )
+
     private fun startEstablish() {
         val generation = synchronized(lifecycleLock) {
             if (running || starting) return
@@ -262,8 +289,17 @@ class ShieldVpnService : VpnService() {
             .setConfigureIntent(buildConfigureIntent())
             .setMtu(VpnConfig.TUN_MTU)
             .addAddress(VpnConfig.TUN_ADDR, VpnConfig.TUN_ADDR_PREFIX)
-            .addRoute(VpnConfig.TUN_ADDR, VpnConfig.TUN_ADDR_PREFIX)
             .addDnsServer(VpnConfig.TUN_ADDR)
+
+        // Routes come from VpnConfig.ALL_ROUTES so the SNI interceptor's precondition
+        // (this stays a single /32 until a forwarding stack exists) is asserted in
+        // SniInterceptionRouteGuardTest rather than being implicit here.
+        VpnConfig.ALL_ROUTES.forEach { route ->
+            runCatching { builder.addRoute(route.address, route.prefixLength) }
+                .onFailure {
+                    logger.w(Logs.VPN, "route ${route.address}/${route.prefixLength} rejected: ${it.message}")
+                }
+        }
 
         // Keep local networks out of the tunnel so Chromecast, printers, mDNS and
         // tethered clients keep working while protection is on.
@@ -353,6 +389,9 @@ class ShieldVpnService : VpnService() {
         }
         if (!isCurrentRun(generation)) return@withContext
         resetCounters()
+        // Fresh interceptor per tunnel: any half-reassembled ClientHello describes the
+        // previous generation's connection and must not be judged against this one.
+        sniInterceptor.reset()
         notificationManager.ensureChannel()
         startNotificationTicker(generation)
         launchScheduleMonitor(generation)
@@ -465,6 +504,25 @@ class ShieldVpnService : VpnService() {
         }
     }
 
+    /**
+     * The [BlockDecision] recorded for a host refused via its TLS ClientHello.
+     *
+     * This path never consults the compiled rule index for the hostname directly:
+     * [TlsSniInterceptor] already asked, and answering BLOCK means a rule matched.
+     * The rule hit is therefore reported as [Category.UNKNOWN] with a signature
+     * prefixed `sni:` so it cannot collide with, or be collapsed into, the DNS
+     * event for the same host.
+     */
+    private fun sniBlockDecision(hostname: String): BlockDecision = BlockDecision(
+        decision = DecisionKind.BLOCK,
+        ruleHit = RuleHit(
+            normalizedDomain = hostname,
+            category = Category.UNKNOWN,
+        ),
+        signature = stableHash("sni:$hostname").toString(),
+        reason = "blocked by TLS SNI inspection",
+    )
+
     private fun dispatchPacket(packet: ByteArray, length: Int, output: OutputStream, generation: Long) {
         val taskCount = activePacketTasks.incrementAndGet()
         if (taskCount > MAX_ACTIVE_PACKET_TASKS) {
@@ -495,6 +553,39 @@ class ShieldVpnService : VpnService() {
         generation: Long,
     ) {
         if (!isCurrentRun(generation)) return
+
+        // TCP 443 interception is evaluated before the UDP path so the SNI engine
+        // gets first refusal on any TCP segment. It is a no-op unless the user has
+        // enabled the setting, because the DNS-only /32 route never delivers TCP
+        // traffic here today (see docs/ARCHITECTURE.md).
+        if (settingsRepository.settings.value.sniInterceptionEnabled) {
+            when (val verdict = sniInterceptor.inspect(packet, length)) {
+                is TlsSniInterceptor.Verdict.Block -> {
+                    stateStore.recordSniBlock()
+                    // Record through the normal block pipeline so SNI blocks appear
+                    // in the same history and reports as DNS blocks. The signature
+                    // prefix keeps them distinct, which is what lets the UI say
+                    // "blocked by TLS name" instead of implying a DNS lookup failed.
+                    recorder.recordBlocked(verdict.hostname, sniBlockDecision(verdict.hostname))
+                    if (isCurrentRun(generation)) {
+                        runCatching { output.write(verdict.reset); output.flush() }
+                            .onFailure {
+                                if (isCurrentRun(generation)) {
+                                    logger.w(Logs.VPN, "sni reset write failed: ${it.message}")
+                                }
+                            }
+                    }
+                    return
+                }
+                // Either allowed, or nothing to inspect. The packet is not ours to
+                // forward: this build has no userspace TCP stack, so it is dropped
+                // exactly as it was before the interceptor existed.
+                TlsSniInterceptor.Verdict.Forward,
+                TlsSniInterceptor.Verdict.Hold,
+                -> return
+            }
+        }
+
         val udp = IpPacketCodec.parseUdp(packet, length)
         if (udp == null) {
             // Non-DNS traffic on the tun (e.g. IPv6 router-solicitation, DoT probes) is ignored by design.

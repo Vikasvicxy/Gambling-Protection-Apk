@@ -124,6 +124,30 @@ object TlsSniParser {
         return scanExtensions(body, p, p + extensionsLength)
     }
 
+    /**
+     * True when an [SniResult.Unreadable.reason] means "the buffer ended early"
+     * rather than "these bytes are not a ClientHello".
+     *
+     * A caller that reassembles a ClientHello across TCP segments needs this
+     * distinction: a truncated prefix must keep buffering, while a structural
+     * error means the payload is not a ClientHello at all and buffering further
+     * would retain hostile input indefinitely. Every length check in this file
+     * that can be satisfied by more bytes reports one of these prefixes, so the
+     * two cases stay separated here rather than at each call site.
+     */
+    fun isTruncatedReason(reason: String): Boolean =
+        reason.startsWith("shorter than") ||
+            reason.startsWith("record claims") ||
+            reason.startsWith("truncated") ||
+            reason.startsWith("session id overruns") ||
+            reason.startsWith("cipher suites overrun") ||
+            reason.startsWith("compression methods overrun") ||
+            reason.startsWith("ClientHello claims") ||
+            reason.startsWith("extensions overrun") ||
+            reason.startsWith("extension 0x") ||
+            reason.startsWith("server_name list overruns") ||
+            reason.startsWith("server name overruns")
+
     /** Walks the extension list looking for type 0x0000, then reads the host_name entry. */
     private fun scanExtensions(body: ByteArray, start: Int, end: Int): SniResult {
         var p = start

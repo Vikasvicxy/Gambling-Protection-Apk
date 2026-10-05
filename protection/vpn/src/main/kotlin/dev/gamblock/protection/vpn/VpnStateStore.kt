@@ -61,6 +61,12 @@ class VpnStateStore @Inject constructor() {
         _state.value = prev.copy(quicDrops = prev.quicDrops + 1)
     }
 
+    /** A TCP connection was reset because its ClientHello named a blocked host. */
+    fun recordSniBlock() {
+        val prev = _state.value
+        _state.value = prev.copy(sniBlocks = prev.sniBlocks + 1)
+    }
+
     /** AAAA answered with an empty NOERROR, so the client retries over IPv4. */
     fun recordIpv6Suppressed() {
         val prev = _state.value

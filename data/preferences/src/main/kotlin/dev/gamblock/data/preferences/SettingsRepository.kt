@@ -54,6 +54,16 @@ data class SettingsState(
      * app at any time.
      */
     val uninstallGuardEnabled: Boolean = false,
+    /**
+     * Inspect outbound TLS ClientHello names on TCP 443 and reset connections to
+     * blocked hosts.
+     *
+     * Default off, and still inert on a DNS-only tunnel: claiming TCP 443 requires
+     * a full-tunnel route, which requires a userspace TCP/IP stack to forward
+     * allowed traffic. Enabled only after that forwarding path exists. See
+     * docs/ARCHITECTURE.md.
+     */
+    val sniInterceptionEnabled: Boolean = false,
     val urgeSurferHaptics: Boolean = true,
     /**
      * Answer AAAA queries with an empty NOERROR so clients fall back to IPv4,
@@ -166,6 +176,9 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setUninstallGuardEnabled(enabled: Boolean) =
         update { it.copy(uninstallGuardEnabled = enabled) }
+
+    suspend fun setSniInterceptionEnabled(enabled: Boolean) =
+        update { it.copy(sniInterceptionEnabled = enabled) }
 
     suspend fun setUrgeSurferHaptics(enabled: Boolean) = update { it.copy(urgeSurferHaptics = enabled) }
 
