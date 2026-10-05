@@ -6,12 +6,15 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
+import android.net.IpPrefix
 import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.VpnService
+import android.os.Build
 import android.os.ParcelFileDescriptor
+import java.net.InetAddress
 import android.system.Os
 import android.system.OsConstants
 import android.system.StructPollfd
@@ -245,6 +248,30 @@ class ShieldVpnService : VpnService() {
             .addAddress(VpnConfig.TUN_ADDR, VpnConfig.TUN_ADDR_PREFIX)
             .addRoute(VpnConfig.TUN_ADDR, VpnConfig.TUN_ADDR_PREFIX)
             .addDnsServer(VpnConfig.TUN_ADDR)
+
+        // Keep local networks out of the tunnel so Chromecast, printers, mDNS and
+        // tethered clients keep working while protection is on.
+        //
+        // Builder has no addDisallowedRoute; the subtraction primitive is
+        // excludeRoute(IpPrefix), which is API 33+. Below that there is no
+        // subtraction API at all, so the only option is to never route the private
+        // space in the first place.
+        //
+        // Note this is a no-op for today's DNS-only /32 tunnel, which already routes
+        // nothing but the DNS address. It is applied now so the routing table is
+        // already correct if a full-tunnel route is ever introduced, rather than
+        // discovering the collision then.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            VpnConfig.ALL_EXCLUSIONS.forEach { route ->
+                runCatching {
+                    // IpPrefix rejects an address with host bits set, so parse and mask.
+                    val parsed = InetAddress.getByName(route.address)
+                    builder.excludeRoute(IpPrefix(parsed, route.prefixLength))
+                }.onFailure {
+                    logger.w(Logs.VPN, "exclude ${route.address}/${route.prefixLength} rejected: ${it.message}")
+                }
+            }
+        }
 
         // Split tunnelling must be declared before establish(): the platform
         // freezes the exemption list when the tunnel comes up, so anything added
