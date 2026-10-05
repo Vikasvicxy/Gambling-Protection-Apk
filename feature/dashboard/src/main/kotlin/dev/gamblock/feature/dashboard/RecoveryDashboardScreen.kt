@@ -21,6 +21,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -32,6 +33,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.gamblock.core.designsystem.component.ShieldButton
 import dev.gamblock.core.designsystem.component.ShieldCard
@@ -58,6 +62,18 @@ fun RecoveryDashboardRoute(
     val insights by viewModel.insights.collectAsStateWithLifecycle()
     val privateDns by viewModel.privateDns.collectAsStateWithLifecycle()
     val promptDomain by viewModel.journalPromptDomain.collectAsStateWithLifecycle()
+    val heatmap by viewModel.heatmap.collectAsStateWithLifecycle()
+
+    // Rebuild the grid on resume: a day can roll over, or the VPN can mark today
+    // protected, while the screen sits in the background.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshHeatmap()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     var spendInput by remember { mutableLongStateOf(-1L) }
     var currency by remember { mutableStateOf<RecoveryCurrency?>(null) }
@@ -73,6 +89,25 @@ fun RecoveryDashboardRoute(
                     metrics = metrics,
                     onStartOrRestartStreak = viewModel::startRecoveryNow,
                 )
+            }
+
+            item {
+                // Null rather than an empty grid when no streak exists, so the user
+                // is told to start one instead of being shown a blank chart that
+                // reads like a rendering fault.
+                val weeks = heatmap
+                if (weeks == null) {
+                    ShieldCard(title = "Last 90 days") {
+                        ShieldText(
+                            text = "Start a streak below and this space becomes a day-by-day " +
+                                "record of protected and unprotected days.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else {
+                    StreakHeatmap(weeks = weeks)
+                }
             }
 
             item {

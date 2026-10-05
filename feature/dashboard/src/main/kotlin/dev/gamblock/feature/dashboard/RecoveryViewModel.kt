@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.gamblock.core.model.CravingTrigger
 import dev.gamblock.core.model.FortressStatus
+import dev.gamblock.core.model.RecoveryCoverage
+import dev.gamblock.core.model.RecoveryHeatmap
 import dev.gamblock.core.model.RecoveryMetrics
 import dev.gamblock.core.model.UrgeTimerConfig
 import dev.gamblock.core.model.UrgeTimerMachine
@@ -33,6 +35,13 @@ data class RecoveryUiState(
     val journalPromptDomain: String? = null,
     val fortress: FortressStatus = FortressStatus(),
     val privateDns: PrivateDnsStatus = PrivateDnsStatus(),
+    /**
+     * The 90-day grid, or null before a streak exists.
+     *
+     * Null is distinct from an all-empty grid so the screen can say "no streak
+     * yet" instead of showing a blank chart that looks like a rendering failure.
+     */
+    val heatmap: List<List<RecoveryHeatmap.Level>>? = null,
 )
 
 data class UrgeTimerUiState(
@@ -67,6 +76,9 @@ class RecoveryViewModel @Inject constructor(
     private val _journalPromptDomain = MutableStateFlow<String?>(null)
     val journalPromptDomain: StateFlow<String?> = _journalPromptDomain.asStateFlow()
 
+    private val _heatmap = MutableStateFlow<List<List<RecoveryHeatmap.Level>>?>(null)
+    val heatmap: StateFlow<List<List<RecoveryHeatmap.Level>>?> = _heatmap.asStateFlow()
+
     val metrics: StateFlow<RecoveryMetrics> = recoveryRepository.metrics
     val privateDns: StateFlow<PrivateDnsStatus> = privateDnsWatchdog.status
 
@@ -74,7 +86,42 @@ class RecoveryViewModel @Inject constructor(
         privateDnsWatchdog.start()
         refreshInsights()
         refreshFortress()
+        refreshHeatmap()
     }
+
+    /**
+     * Rebuilds the 90-day grid from local data only.
+     *
+     * Reads the protected-day set the VPN service writes and the journal rows the
+     * user logged, then buckets both by local day. Deliberately Kotlin-side rather
+     * than a SQL `GROUP BY`: it keeps the zone handling identical to
+     * `RecoveryCoverage`, which decides the savings figure, so the chart and the
+     * headline number can never disagree about which day a record belongs to.
+     */
+    fun refreshHeatmap() {
+        viewModelScope.launch {
+            val profile = recoveryRepository.profile.value
+            if (profile.recoveryStartEpochMs == null) {
+                _heatmap.value = null
+                return@launch
+            }
+            val zone = java.time.ZoneId.systemDefault()
+            val today = java.time.LocalDate.now(zone)
+            _heatmap.value = RecoveryHeatmap.build(
+                protectedEpochDays = recoveryRepository.protectedEpochDays.value,
+                urgeEpochDays = urgeEpochDays(recoveryRepository.journal.value, zone),
+                startEpochMs = profile.recoveryStartEpochMs,
+                today = today,
+                zoneId = zone,
+            )
+        }
+    }
+
+    /** Days on which the user logged at least one urge. */
+    private fun urgeEpochDays(
+        entries: List<dev.gamblock.data.preferences.UrgeJournalEntry>,
+        zone: java.time.ZoneId,
+    ): Set<Long> = entries.map { RecoveryCoverage.epochDay(it.occurredAtEpochMs, zone) }.toSet()
 
     override fun onCleared() {
         privateDnsWatchdog.stop()
