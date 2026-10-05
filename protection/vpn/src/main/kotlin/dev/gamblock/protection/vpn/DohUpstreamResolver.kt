@@ -201,7 +201,7 @@ class OkHttpDohTransport(
 
     private companion object {
         const val CONTENT_TYPE = "application/dns-message"
-        const val USER_AGENT = "Shield-Android/1.3.0 (DoH)"
+        const val USER_AGENT = "Shield-Android/1.4.0 (DoH)"
         const val MAX_RESPONSE_BYTES = 65_535
     }
 }

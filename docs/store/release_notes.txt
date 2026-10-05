@@ -1,10 +1,11 @@
-Shield v1.3.0
+Shield v1.4.0
 
-LESS TRACKING
-- Optional DNS-over-HTTPS: allowed sites resolve over HTTPS to Quad9, so your network sees a lookup, not what for. If Quad9 is down, Shield says so, not by leaking the name.
+FIXED
+- Uninstall guard could not be answered: the PIN prompt now takes keyboard focus, and its status line no longer crashes on a wrong PIN.
+- Guard now recognises Samsung One UI, Xiaomi, OnePlus, ColorOS and Pixel uninstall screens. If it switches itself off, Shield says so once.
 
-HARDER TO GIVE UP
-- Optional uninstall guard: the uninstall screen asks for your guardian PIN first. It never challenges Shield's own screens, and is always dismissible. Play restricts the Accessibility API.
-- 90-day recovery heatmap; unprotected days in red.
+STRONGER
+- 10,000-query DNS/DoH stress tests: no socket, thread or memory growth, and no hanging on a dead network.
+- Reviewed against Play's Accessibility and battery rules.
 
 No account, no telemetry.

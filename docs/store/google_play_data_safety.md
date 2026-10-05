@@ -1,8 +1,25 @@
-# Google Play Data Safety — Shield (`dev.gamblock.shield`) v1.1.0
+# Google Play Data Safety — Shield (`dev.gamblock.shield`) v1.4.0
 
-Verified against the source in this repository on 2026-09-27 (v1.1.0). Not a legal
+Verified against the source in this repository on 2026-10-05 (v1.4.0). Not a legal
 opinion, and not a substitute for your own review. If any answer here does not
 match what the shipped binary does, the Data Safety form is wrong, not the app.
+
+---
+
+## CHANGES SINCE THE LAST REVIEW
+
+* v1.4.0 added an **Accessibility API disclosure** and a **battery-optimisation
+  justification** (section 8). Both are required by Play for this app's permission
+  set and neither was documented before.
+* v1.4.0 added a **boot and app-update broadcast receiver** that posts a local
+  notification if the uninstall-guard accessibility service is found unbound. It
+  reads the local settings flag and system Accessibility settings and transmits
+  nothing.
+* v1.4.0 added a **DNS-over-HTTPS** path (Quad9, POST with
+  `application/dns-message`). It changes *where* the lookup goes, not what is
+  collected: the hostname goes to Quad9 instead of the carrier. See section 8.
+* The Accountability answers below are unchanged from v1.1.0 and remain the only
+  user data that leaves the device.
 
 ---
 
@@ -159,7 +176,73 @@ through the support address below.
 
 ---
 
-## 7. Contact
+## 8. Special API and sensitive-permission disclosures
+
+These are Play's separate review questions, not Data Safety questions. They are
+recorded here because both were undocumented before v1.4.0 and both are the kind of
+thing a reviewer rejects the build over.
+
+### Accessibility API (`AccessibilityService`)
+
+**What it does.** `ShieldAccessibilityGuard` observes *window-change* events and
+compares the activity class name against a list meaning "app details or uninstall
+screen". On a match it shows an optional guardian-PIN prompt over that screen.
+
+**What it does not do, explicitly.**
+
+* It does **not** read screen content. It requests no `canRetrieveWindowContent`
+  capability and inspects no node text. It reads the event's package name and class
+  name only.
+* It does **not** log, store, or transmit anything it observes.
+* It does **not** act on other apps, and it does not automate anything. It never
+  clicks, scrolls, or dismisses anything on the user's behalf.
+* It is **off by default** (`uninstallGuardEnabled = false`) and requires the user to
+  enable it in system Accessibility settings.
+* It **only raises a prompt.** It cannot block an uninstall: Shield does not own the
+  system window. The prompt is always dismissible, including without the PIN.
+
+**Where the user sees it.** Settings → Security, next to the system prompt granting
+the service. `docs/store/full_description.txt` and the in-app screen both state the
+above.
+
+**Play risk, stated honestly.** Play permits the Accessibility API for accessibility
+tools. Shield is an opt-in guardian feature for a user in recovery, not an
+accessibility tool, so this **is a plausible rejection reason** and should be
+declared as an accessibility tool in the declaration form with the justification
+above. If it is rejected, the correct response is to remove the service, not to
+misdescribe it.
+
+### Battery optimisation exemption (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`)
+
+**Why it is core functionality.** A VPN is killed by the OS when the device is idle
+or the app is swiped away. For Shield, that failure mode is indistinguishable from
+success to the user — the protection indicator is gone, so is the protection. The
+health engine reports the VPN component as **degraded** when the app is not exempt,
+and Diagnostics offers a one-tap fix.
+
+**How it is requested.** Through `Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`
+with a `package:` URI (`DiagnosticsViewModel.fixIntent`), which is the only form Play
+permits. On OEM builds Shield first tries the vendor's own autostart screen and only
+falls back to the platform dialog.
+
+**Honest note.** A persistent VPN is exempt from battery optimisation on Android for
+most OEMs anyway, so this request is a belt-and-braces measure. It is safe to describe
+as such in the declaration form.
+
+### DNS-over-HTTPS (no new permission, disclosed for completeness)
+
+When the user enables DoH, DNS queries are sent to Quad9 as RFC 8484 POSTs over TLS.
+This does not add a permission and does not create new *collection* — the hostname
+already had to be looked up to be blocked. What changes is the recipient: the lookup
+goes to Quad9 rather than the carrier, which is the point of the feature.
+
+It fails closed. If Quad9 is unreachable Shield reports the failure; it does **not**
+fall back to a plaintext lookup, because a silent downgrade would hand the name to the
+carrier while the UI claimed protection.
+
+---
+
+## 9. Contact
 
 * **Support / privacy / deletion / security requests:**
   https://github.com/Vikasvicxy/Gambling-Protection-Apk/issues

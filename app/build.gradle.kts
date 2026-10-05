@@ -92,14 +92,15 @@ android {
         applicationId = "dev.gamblock.shield"
         minSdk = 26
         targetSdk = 36
-        // v1.3.0: encrypted DNS upstream, the optional uninstall guard, and the
-        // 90-day recovery heatmap. Also the groundwork for TLS SNI parsing and
-        // LAN route exclusions.
+        // v1.4.0: TCP/SNI interception engine, multi-vendor uninstall-guard coverage,
+        // and 10k-query DNS/DoH stress verification. The SNI engine is not routed
+        // yet -- see docs/ARCHITECTURE.md for why a port-selective route needs a
+        // userspace forwarding stack that does not exist yet.
         //
-        // versionCode moves 5 -> 6, which is what Play actually requires on every
+        // versionCode moves 6 -> 7, which is what Play actually requires on every
         // upload to an existing app.
-        versionCode = 6
-        versionName = "1.3.0"
+        versionCode = 7
+        versionName = "1.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
