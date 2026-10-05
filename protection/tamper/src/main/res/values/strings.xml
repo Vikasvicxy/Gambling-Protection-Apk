@@ -12,4 +12,14 @@
     <string name="uninstall_guard_challenge_bad_format">Enter all four digits.</string>
     <string name="uninstall_guard_challenge_wrong">That PIN did not match. Try again.</string>
     <string name="uninstall_guard_challenge_unlocked">Guardian PIN accepted.</string>
+
+    <!--
+        Fallback notice for when the accessibility service is found unbound while the
+        user still believes the guard is on. Wording avoids blame: on some OEM builds
+        this happens without the user doing anything.
+    -->
+    <string name="uninstall_guard_fallback_channel">Uninstall guard status</string>
+    <string name="uninstall_guard_fallback_channel_description">Notices when the uninstall guard needs your attention.</string>
+    <string name="uninstall_guard_fallback_title">Uninstall guard is not running</string>
+    <string name="uninstall_guard_fallback_body">Shield noticed your uninstall guard is switched off, so removing Shield is currently unguarded. Some devices turn the service off after an update or reboot. Open Accessibility settings to turn "Shield uninstall guard" back on.</string>
 </resources>

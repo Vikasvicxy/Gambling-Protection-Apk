@@ -128,8 +128,13 @@ class ShieldAccessibilityGuard : AccessibilityService() {
             // SYSTEM_ALERT_WINDOW, which is what keeps this feature from demanding a
             // permission the user would rightly be wary of granting.
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            // FLAG_NOT_FOCUSABLE is deliberately NOT set. It would stop the window
+            // receiving input focus, which in turn stops the PIN EditText from
+            // raising the keyboard -- the prompt would be visible but impossible to
+            // answer. Focus is taken so the field can be typed into immediately.
+            //
+            // FLAG_NOT_TOUCH_MODAL is kept so the overlay only takes input it draws.
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
             PixelFormat.TRANSLUCENT,
         ).apply { gravity = Gravity.CENTER }
@@ -140,6 +145,10 @@ class ShieldAccessibilityGuard : AccessibilityService() {
                 overlay = handle.root
                 challenge = handle
                 state.onChallengeRaised()
+                // Move focus to the PIN field now the window has focus. Without this
+                // the user taps the field manually before anything is accepted.
+                handle.root.findFocus()?.clearFocus()
+                handle.root.requestFocus()
             }
             // If the window cannot be added we simply do not challenge. Failing to
             // attach a view must never take the service down.

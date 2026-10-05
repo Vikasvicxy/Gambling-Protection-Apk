@@ -26,5 +26,28 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/shield_accessibility_guard" />
         </service>
+
+        <!--
+            Fallback notice when the service above is unbound while the user still
+            believes the guard is on. The platform gives no callback for an
+            accessibility service being switched off, so this reacts to the lifecycle
+            events after which that happens.
+
+            exported=false: only this app's own broadcasts can reach it. The system
+            still delivers BOOT_COMPLETED and MY_PACKAGE_REPLACED to a non-exported
+            receiver, so nothing is lost, and there is no spoofing surface for a
+            third-party app to poke at Shield's protection state.
+        -->
+        <receiver
+            android:name=".UninstallGuardFallbackReceiver"
+            android:enabled="true"
+            android:exported="false"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

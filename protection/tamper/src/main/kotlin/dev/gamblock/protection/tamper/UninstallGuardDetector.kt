@@ -7,8 +7,8 @@ package dev.gamblock.protection.tamper
  * Kept free of Android types so the decision can be tested directly. The policy
  * here is deliberately narrow:
  *
- * - Only *system* packages count. Shield's own screens must never trip the guard,
- *   or the app would lock the user out of its own settings.
+ * - Shield's own screens must never trip the guard, or the app would lock the user
+ *   out of its own settings.
  * - Only the app-details screen counts. Uninstall is reached from there, and
  *   treating every Settings screen as an attempt would make the app hostile to
  *   use for no security gain.
@@ -29,9 +29,12 @@ object UninstallGuardDetector {
         "AppInfo",
         "InstalledAppDetails",
         "ApplicationsDetails",
-        "AppDetails",
+        // "AppDetail" rather than "AppDetails": the singular form is what vendors
+        // actually ship (OnePlus ChainLaunchAppDetailActivity, ColorOS
+        // AppDetailsActivity), and a substring match on the shorter string covers
+        // both spellings without a second entry.
+        "AppDetail",
         "Uninstall",
-        "UninstallActivity",
         "UninstallApp",
         "applicationdetails",
     )
@@ -55,6 +58,10 @@ object UninstallGuardDetector {
         // The activity name is the actual signal: package names vary per OEM and
         // per Android version, so a package allowlist alone would miss vendors we
         // have not enumerated, and would keep needing maintenance as new ones ship.
+        // Known false-positive risk: a third-party app with "Uninstall" or "AppInfo"
+        // in its activity name can trip this. Accepted deliberately -- a package
+        // allowlist would trade that for missed vendor uninstalls, which is the
+        // failure this guard exists to prevent. See UninstallGuardDetectorTest.
         return isUninstallActivity(cls)
     }
 

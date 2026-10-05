@@ -42,11 +42,19 @@ internal object UninstallGuardChallenge {
     /**
      * Handle on the built view, so the service can return it to an editable state
      * after a wrong PIN without rebuilding the whole overlay.
+     *
+     * Resolved lazily by tag on first use rather than in the constructor: the
+     * children it looks up do not exist until [build] has added them, so capturing
+     * them eagerly would bind null into these non-null fields and every status
+     * update would throw. [assertWired] makes that regression loud in tests.
      */
     class Handle(val root: ViewGroup) {
-        private val pinField: EditText = root.findViewWithTag(TAG_PIN)
-        private val status: TextView = root.findViewWithTag(TAG_STATUS)
-        private val confirm: Button = root.findViewWithTag(TAG_CONFIRM)
+        private val pinField: EditText by lazy { root.requireTag(TAG_PIN) }
+        private val status: TextView by lazy { root.requireTag(TAG_STATUS) }
+        private val confirm: Button by lazy { root.requireTag(TAG_CONFIRM) }
+
+        /** True when every tagged child resolved. Checked by the Robolectric suite. */
+        fun assertWired(): Boolean = runCatching { pinField; status; confirm }.isSuccess
 
         fun onVerificationPending() {
             pinField.isEnabled = false
@@ -59,12 +67,22 @@ internal object UninstallGuardChallenge {
             pinField.text = null
             confirm.isEnabled = true
             status.setText(R.string.uninstall_guard_challenge_wrong)
+            // Re-arm the keyboard so a corrected PIN can actually be typed. The
+            // window takes focus when it appears, so the field is ready either way,
+            // but clearing and refocusing makes the retry path reliable.
+            pinField.requestFocus()
         }
 
         fun showBadFormat() {
             status.setText(R.string.uninstall_guard_challenge_bad_format)
+            pinField.requestFocus()
         }
     }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun <T : View> ViewGroup.requireTag(tag: String): T =
+        findViewWithTag<View>(tag) as? T
+            ?: error("challenge view missing tag '$tag'; build() and Handle must stay in step")
 
     fun build(context: Context, host: Host): Handle {
         val root = LinearLayout(context).apply {
@@ -75,9 +93,10 @@ internal object UninstallGuardChallenge {
             // Consume touches so taps cannot reach the uninstall button underneath.
             isClickable = true
             isFocusable = true
+            // The field is the one thing that must take focus, or the soft keyboard
+            // never appears and the prompt cannot be answered.
+            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         }
-        val handle = Handle(root)
-
         root.addView(
             TextView(context).apply {
                 text = context.getString(R.string.uninstall_guard_challenge_title)
@@ -119,6 +138,10 @@ internal object UninstallGuardChallenge {
                 setPadding(0, dp(context, 12), 0, 0)
             },
         )
+
+        // Handle resolves its views lazily by tag, so it is safe to create here: the
+        // listener below can fire long after build() has returned. See Handle.
+        val handle = Handle(root)
 
         root.addView(
             Button(context).apply {
