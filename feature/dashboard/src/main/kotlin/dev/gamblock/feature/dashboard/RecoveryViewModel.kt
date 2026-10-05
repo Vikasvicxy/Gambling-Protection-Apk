@@ -36,7 +36,7 @@ data class RecoveryUiState(
     val fortress: FortressStatus = FortressStatus(),
     val privateDns: PrivateDnsStatus = PrivateDnsStatus(),
     /**
-     * The 90-day grid, or null before a streak exists.
+     * The [RecoveryHeatmap.DAYS]-day grid, or null before a streak exists.
      *
      * Null is distinct from an all-empty grid so the screen can say "no streak
      * yet" instead of showing a blank chart that looks like a rendering failure.
@@ -90,7 +90,7 @@ class RecoveryViewModel @Inject constructor(
     }
 
     /**
-     * Rebuilds the 90-day grid from local data only.
+     * Rebuilds the [RecoveryHeatmap.DAYS]-day grid from local data only.
      *
      * Reads the protected-day set the VPN service writes and the journal rows the
      * user logged, then buckets both by local day. Deliberately Kotlin-side rather

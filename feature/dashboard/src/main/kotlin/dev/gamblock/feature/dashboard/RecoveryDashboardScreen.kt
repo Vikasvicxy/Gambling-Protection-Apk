@@ -97,7 +97,7 @@ fun RecoveryDashboardRoute(
                 // reads like a rendering fault.
                 val weeks = heatmap
                 if (weeks == null) {
-                    ShieldCard(title = "Last 90 days") {
+                    ShieldCard(title = "Last 12 weeks") {
                         ShieldText(
                             text = "Start a streak below and this space becomes a day-by-day " +
                                 "record of protected and unprotected days.",

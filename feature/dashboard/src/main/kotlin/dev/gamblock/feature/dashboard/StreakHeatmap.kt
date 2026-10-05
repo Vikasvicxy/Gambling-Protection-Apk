@@ -24,7 +24,11 @@ import dev.gamblock.core.designsystem.theme.ShieldPalette
 import dev.gamblock.core.model.RecoveryHeatmap
 
 /**
- * A 90-day recovery heatmap, one cell per day, laid out as whole weeks.
+ * A twelve-week recovery heatmap, one cell per day, laid out as whole weeks.
+ *
+ * The window is [RecoveryHeatmap.DAYS] days, not ninety: a contribution-style grid
+ * only lines up into columns when the window is a whole number of weeks, and the
+ * labels below state the real number rather than a rounder-sounding one.
  *
  * The colours are not decorative. [RecoveryHeatmap.Level.GAP] is a day inside the
  * streak where Shield was not observed running, and it is rendered red on purpose:
@@ -41,7 +45,7 @@ fun StreakHeatmap(
     modifier: Modifier = Modifier,
 ) {
     ShieldCard(
-        title = "Last 90 days",
+        title = "Last 12 weeks",
         modifier = modifier,
     ) {
         ShieldText(
@@ -133,8 +137,8 @@ private fun summaryDescription(weeks: List<List<RecoveryHeatmap.Level>>): String
     val clean = counts[RecoveryHeatmap.Level.CLEAN] ?: 0
     val lapse = counts[RecoveryHeatmap.Level.STREAK_WITH_LAPSE] ?: 0
     val gap = counts[RecoveryHeatmap.Level.GAP] ?: 0
-    return "90 day recovery chart. $clean clean days, $lapse days with a logged urge, " +
-        "$gap days not protected."
+    return "${RecoveryHeatmap.DAYS} day recovery chart. $clean clean days, " +
+        "$lapse days with a logged urge, $gap days not protected."
 }
 
 private val CELL_SIZE = 14.dp
