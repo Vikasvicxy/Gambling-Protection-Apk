@@ -20,6 +20,7 @@ import dev.gamblock.core.security.BackupCryptoManager
 import dev.gamblock.core.security.InvalidBackupFormatException
 import dev.gamblock.core.security.InvalidPassphraseException
 import dev.gamblock.core.security.UnsupportedBackupVersionException
+import dev.gamblock.core.testing.AndroidJceProviders
 import dev.gamblock.core.testing.FakeWallClock
 import dev.gamblock.core.testing.NoOpLogger
 import dev.gamblock.core.testing.TestDispatchersProvider
@@ -60,6 +61,11 @@ class RecoveryBackupRepositoryTest {
 
     @Before
     fun setUp() {
+        // Robolectric's android-all providers poison the host JVM's JCE provider
+        // verification, which breaks every Cipher.getInstance call and makes every
+        // backup test report a bogus "0 bytes" failure. Drop them before any crypto.
+        AndroidJceProviders.dropAndroidProviders()
+
         context = ApplicationProvider.getApplicationContext()
         database = Room.inMemoryDatabaseBuilder(context, ShieldDatabase::class.java)
             .allowMainThreadQueries()
